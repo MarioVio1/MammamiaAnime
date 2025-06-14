@@ -72,19 +72,19 @@
             "AW_PROXY": "0"
         },
         "AnimeSaturn": {
-            "url": "https://www.animesaturn.tv",
+            "url": "https://www.animesaturn.cx",
             "enabled": "1",
             "AnimeSaturn_ForwardProxy": "0",
             "AnimeSaturn_Proxy": "0"
         },
         "AnimeUnity": {
-            "url": "https://www.animeunity.to",
+            "url": "https://animeunity.com.co",
             "enabled": "1",
             "AnimeUnity_ForwardProxy": "0",
             "AnimeUnity_Proxy": "0"
         },
         "GogoAnime": {
-            "url": "https://gogoanime3.co",
+            "url": "https://wvv.gogoanime.org.vc",
             "enabled": "1",
             "GogoAnime_ForwardProxy": "0",
             "GogoAnime_Proxy": "0"
