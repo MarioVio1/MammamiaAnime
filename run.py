@@ -360,6 +360,37 @@ async def test_scrapers():
     
     return results
 
+@app.get('/debug-animesaturn')
+async def debug_animesaturn():
+    """Debug specifico per AnimeSaturn"""
+    if 'animesaturn' not in anime_scrapers:
+        return {"error": "AnimeSaturn scraper not available"}
+    
+    scraper = anime_scrapers['animesaturn']
+    
+    try:
+        # Test connessione base
+        response = scraper.make_request(scraper.base_url)
+        
+        # Test ricerca
+        search_url = f"{scraper.base_url}/animelist"
+        search_response = scraper.make_request(search_url, params={'search': 'naruto'})
+        
+        soup = BeautifulSoup(search_response.text, 'html.parser')
+        
+        return {
+            "base_url": scraper.base_url,
+            "base_status": response.status_code,
+            "search_url": search_url,
+            "search_status": search_response.status_code,
+            "page_title": soup.title.text if soup.title else "No title",
+            "total_links": len(soup.find_all('a')),
+            "anime_links": len(soup.find_all('a', href=re.compile(r'/anime/'))),
+            "page_content_sample": search_response.text[:500]
+        }
+        
+    except Exception as e:
+        return {"error": str(e)}
 
 # CATALOGHI
 async def addon_catalog(type: str, id: str, genre: str = None, search: str = None):
