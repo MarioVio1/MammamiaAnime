@@ -15,9 +15,14 @@ from Src.API.okru import okru_get_url
 from Src.API.animeworld import animeworld
 
 # NUOVE IMPORTAZIONI ANIME
-from scrapers.animesaturn import AnimeSaturnScraper
-from scrapers.animeunity import AnimeUnityScraper
-from scrapers.gogoanime import GogoAnimeScraper
+try:
+    from scrapers.animesaturn import AnimeSaturnScraper
+    from scrapers.animeunity import AnimeUnityScraper
+    from scrapers.gogoanime import GogoAnimeScraper
+    ANIME_SCRAPERS_AVAILABLE = True
+except ImportError as e:
+    print(f"Warning: Anime scrapers not available: {e}")
+    ANIME_SCRAPERS_AVAILABLE = False
 
 from Src.Utilities.dictionaries import okru,STREAM,extra_sources,webru_vary,webru_dlhd,provider_map,skystreaming
 from Src.API.epg import tivu, tivu_get,epg_guide,convert_bho_1,convert_bho_2,convert_bho_3
@@ -33,6 +38,7 @@ from urllib.parse import unquote
 from Src.Utilities.m3u8 import router as m3u8_clone
 import urllib.parse
 import re
+import asyncio
 
 #Configure Env Vars
 Global_Proxy = config.Global_Proxy
@@ -71,11 +77,19 @@ SKY_DOMAIN = config.SKY_DOMAIN
 Remote_Instance = config.Remote_Instance
 
 # INIZIALIZZAZIONE SCRAPERS ANIME
-anime_scrapers = {
-    'animesaturn': AnimeSaturnScraper(),
-    'animeunity': AnimeUnityScraper(),
-    'gogoanime': GogoAnimeScraper()
-}
+anime_scrapers = {}
+if ANIME_SCRAPERS_AVAILABLE:
+    try:
+        if hasattr(config, 'AS') and config.AS == "1":
+            anime_scrapers['animesaturn'] = AnimeSaturnScraper()
+        if hasattr(config, 'AU') and config.AU == "1":
+            anime_scrapers['animeunity'] = AnimeUnityScraper()
+        if hasattr(config, 'GA') and config.GA == "1":
+            anime_scrapers['gogoanime'] = GogoAnimeScraper()
+        print(f"Initialized anime scrapers: {list(anime_scrapers.keys())}")
+    except Exception as e:
+        print(f"Error initializing anime scrapers: {e}")
+        anime_scrapers = {}
 
     #Cool code to set the hugging face if the service is hosted there.
 if MYSTERIUS == "1":
@@ -91,7 +105,7 @@ User_Agent= "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:127.0) Gecko/20100101 Fi
 # MANIFEST AGGIORNATO CON SUPPORTO ANIME
 MANIFEST = {
     "id": "org.stremio.mammamia",
-    "version": "1.6.0",  # Incrementata versione
+    "version": "1.6.0",
     "catalogs": [
         {
             "type": "tv",
@@ -108,8 +122,18 @@ MANIFEST = {
                     "options": ["Intrattenimento", "Film & Serie", "Documentari", "Sport", "Sky", "DAZN", "Rai", "Mediaset", "La7", "Discovery", "Sportitalia", "RSI", "Rakuten", "Pluto" ]
                 }
             ]
-        },
-        # NUOVI CATALOGHI ANIME
+        }
+    ],
+    "resources": ["stream", "catalog", "meta"],
+    "types": ["movie", "series", "tv"],
+    "name": Name,
+    "description": "Addon providing HTTPS Streams for Italian Movies, Series, Live TV and Anime from multiple sources!",
+    "logo": "https://creazilla-store.fra1.digitaloceanspaces.com/emojis/49647/pizza-emoji-clipart-md.png"
+}
+
+# Aggiungi cataloghi anime solo se disponibili
+if anime_scrapers:
+    MANIFEST["catalogs"].extend([
         {
             "type": "series",
             "id": "anime_search",
@@ -126,13 +150,7 @@ MANIFEST = {
             "id": "anime_popular",
             "name": "Anime Popolari"
         }
-    ],
-    "resources": ["stream", "catalog", "meta"],
-    "types": ["movie", "series", "tv"],
-    "name": Name,
-    "description": "Addon providing HTTPS Streams for Italian Movies, Series, Live TV and Anime from multiple sources!",
-    "logo": "https://creazilla-store.fra1.digitaloceanspaces.com/emojis/49647/pizza-emoji-clipart-md.png"
-}
+    ])
 
 def respond_with(data):
     resp = JSONResponse(data)
@@ -153,19 +171,35 @@ async def transform_mfp(mfp_stream_url,client):
         return None
 
 # FUNZIONE PER RICERCA ANIME
-async def search_anime_multi_source(query: str, client):
+async def search_anime_multi_source(query: str):
     """Cerca anime su tutti i siti configurati"""
+    if not anime_scrapers:
+        return []
+        
     all_results = []
     
-    for site_name, scraper in anime_scrapers.items():
+    # Usa asyncio per eseguire le ricerche in parallelo
+    async def search_site(site_name, scraper):
         try:
             print(f"Searching {site_name} for: {query}")
-            results = scraper.search(query)
+            # Esegui la ricerca in un thread separato per non bloccare
+            loop = asyncio.get_event_loop()
+            results = await loop.run_in_executor(None, scraper.search, query)
             for result in results:
                 result['source_site'] = site_name
-            all_results.extend(results)
+            return results
         except Exception as e:
             print(f"Error searching {site_name}: {e}")
+            return []
+    
+    # Esegui tutte le ricerche in parallelo
+    tasks = [search_site(site_name, scraper) for site_name, scraper in anime_scrapers.items()]
+    if tasks:
+        results_lists = await asyncio.gather(*tasks, return_exceptions=True)
+        
+        for results in results_lists:
+            if isinstance(results, list):
+                all_results.extend(results)
     
     return all_results
 
@@ -196,9 +230,11 @@ def addon_manifest(config: str):
     if "LIVETV"  in config:
         return respond_with(manifest_copy)
     elif "LIVETV" not in config:
+        # Rimuovi solo cataloghi TV, mantieni anime se disponibili
         manifest_copy["catalogs"] = [cat for cat in manifest_copy["catalogs"] if cat["type"] != "tv"]
-        if "catalog" in manifest_copy["resources"]:
-            manifest_copy["resources"].remove("catalog")
+        if not any(cat["type"] == "series" for cat in manifest_copy["catalogs"]):
+            if "catalog" in manifest_copy["resources"]:
+                manifest_copy["resources"].remove("catalog")
         return respond_with(manifest_copy)
 
 @app.get('/manifest.json')
@@ -234,32 +270,31 @@ async def addon_catalog(type: str, id: str, genre: str = None, search: str = Non
         return catalogs
     
     # GESTIONE CATALOGHI ANIME
-    elif type == "series" and id.startswith("anime_"):
+    elif type == "series" and id.startswith("anime_") and anime_scrapers:
         catalogs = {"metas": []}
         
         if id == "anime_search" and search:
-            async with AsyncSession(proxies=proxies) as client:
-                # Ricerca anime su tutti i siti
-                anime_results = await search_anime_multi_source(search, client)
-                anime_results = deduplicate_anime_results(anime_results)
+            # Ricerca anime su tutti i siti
+            anime_results = await search_anime_multi_source(search)
+            anime_results = deduplicate_anime_results(anime_results)
+            
+            for anime in anime_results[:20]:  # Limita a 20 risultati
+                # Genera ID unico per ogni anime
+                anime_id = f"anime_{anime['source_site']}_{anime['title'].replace(' ', '_').lower()}"
+                anime_id = re.sub(r'[^\w_]', '', anime_id)
                 
-                for anime in anime_results:
-                    # Genera ID unico per ogni anime
-                    anime_id = f"anime_{anime['source_site']}_{anime['title'].replace(' ', '_').lower()}"
-                    anime_id = re.sub(r'[^\w_]', '', anime_id)
-                    
-                    catalogs["metas"].append({
-                        "id": anime_id,
-                        "type": "series",
-                        "name": anime['title'],
-                        "poster": anime.get('image'),
-                        "description": f"Anime da {anime['source_site'].upper()}",
-                        "genres": ["Anime"],
-                        "imdbRating": None
-                    })
+                catalogs["metas"].append({
+                    "id": anime_id,
+                    "type": "series",
+                    "name": anime['title'],
+                    "poster": anime.get('image'),
+                    "description": f"Anime da {anime['source_site'].upper()}",
+                    "genres": ["Anime"],
+                    "imdbRating": None
+                })
         
         elif id == "anime_popular":
-            # Placeholder per anime popolari - implementare se necessario
+            # Placeholder per anime popolari
             catalogs["metas"] = []
         
         return catalogs
@@ -279,7 +314,6 @@ async def catalog_with_genre(type: str, id: str, genre: str = None):
     catalogs = await addon_catalog(type, id, genre)
     return respond_with(catalogs)
 
-# NUOVO ENDPOINT PER RICERCA ANIME CON PARAMETRI EXTRA
 @app.get('/{config:path}/catalog/{type}/{id}/search={search}.json')
 async def catalog_with_search(request: Request, type: str, id: str, search: str):
     catalogs = await addon_catalog(type, id, search=search)
@@ -324,7 +358,7 @@ async def addon_meta(request: Request,id: str):
 @app.get('/{config:path}/meta/series/{id}.json')
 @limiter.limit("20/second")
 async def anime_meta(request: Request, id: str):
-    if id.startswith('anime_'):
+    if id.startswith('anime_') and anime_scrapers:
         # Estrai informazioni dall'ID
         parts = id.split('_')
         if len(parts) >= 3:
@@ -354,56 +388,58 @@ async def addon_stream(request: Request,config, type, id,):
     streams = {'streams': []}
     
     # GESTIONE STREAM ANIME
-    if type == "series" and id.startswith('anime_'):
-        async with AsyncSession(proxies=proxies) as client:
-            try:
-                # Estrai informazioni dall'ID anime
-                parts = id.split('_')
-                if len(parts) >= 3:
-                    source_site = parts[1]
-                    anime_title = ' '.join(parts[2:]).replace('_', ' ')
+    if type == "series" and id.startswith('anime_') and anime_scrapers:
+        try:
+            # Estrai informazioni dall'ID anime
+            parts = id.split('_')
+            if len(parts) >= 3:
+                source_site = parts[1]
+                anime_title = ' '.join(parts[2:]).replace('_', ' ')
+                
+                if source_site in anime_scrapers:
+                    scraper = anime_scrapers[source_site]
                     
-                    if source_site in anime_scrapers:
-                        scraper = anime_scrapers[source_site]
+                    # Esegui operazioni in thread separato
+                    loop = asyncio.get_event_loop()
+                    
+                    # Prima cerca l'anime per ottenere l'URL
+                    search_results = await loop.run_in_executor(None, scraper.search, anime_title)
+                    if search_results:
+                        anime_url = search_results[0]['url']
                         
-                        # Prima cerca l'anime per ottenere l'URL
-                        search_results = scraper.search(anime_title)
-                        if search_results:
-                            anime_url = search_results[0]['url']
+                        # Ottieni episodi
+                        episodes = await loop.run_in_executor(None, scraper.get_episodes, anime_url)
+                        
+                        if episodes:
+                            # Per ora prendiamo il primo episodio
+                            first_episode = episodes[0]
+                            stream_links = await loop.run_in_executor(None, scraper.get_stream_links, first_episode['url'])
                             
-                            # Ottieni episodi
-                            episodes = scraper.get_episodes(anime_url)
-                            
-                            if episodes:
-                                # Per ora prendiamo il primo episodio
-                                first_episode = episodes[0]
-                                stream_links = scraper.get_stream_links(first_episode['url'])
-                                
-                                for i, stream in enumerate(stream_links):
-                                    streams['streams'].append({
-                                        'name': f"{Name} - {source_site.upper()}",
-                                        'title': f'{Icon}{source_site.upper()} - {stream.get("quality", "HD")}',
-                                        'url': stream['url'],
-                                        'behaviorHints': {
-                                            'notWebReady': stream.get('type') == 'iframe',
-                                            'bingeGroup': f'anime_{source_site}'
-                                        }
-                                    })
+                            for i, stream in enumerate(stream_links):
+                                streams['streams'].append({
+                                    'name': f"{Name} - {source_site.upper()}",
+                                    'title': f'{Icon}{source_site.upper()} - {stream.get("quality", "HD")}',
+                                    'url': stream['url'],
+                                    'behaviorHints': {
+                                        'notWebReady': stream.get('type') == 'iframe',
+                                        'bingeGroup': f'anime_{source_site}'
+                                    }
+                                })
+            
+            if not streams['streams']:
+                streams['streams'].append({
+                    'name': f"{Name}",
+                    'title': f'{Icon}Anime non disponibile',
+                    'url': 'https://example.com/not_found.mp4'
+                })
                 
-                if not streams['streams']:
-                    streams['streams'].append({
-                        'name': f"{Name}",
-                        'title': f'{Icon}Anime non disponibile',
-                        'url': 'https://example.com/not_found.mp4'
-                    })
-                    
-            except Exception as e:
-                print(f"Error getting anime streams: {e}")
-                raise HTTPException(status_code=404)
-                
+        except Exception as e:
+            print(f"Error getting anime streams: {e}")
+            raise HTTPException(status_code=404)
+            
         return respond_with(streams)
     
-    # RESTO DEL CODICE ORIGINALE PER TV E FILM
+    # RESTO DEL CODICE ORIGINALE PER TV E FILM (invariato)
     if "|" in config:
         config_providers = config.split('|')
     elif "%7C" in config:
@@ -432,7 +468,7 @@ async def addon_stream(request: Request,config, type, id,):
 
     async with AsyncSession(proxies = proxies) as client:
         if type == "tv":
-            # CODICE ORIGINALE PER TV (invariato)
+            # CODICE ORIGINALE TV (mantenuto invariato)
             for channel in STREAM["channels"]:
                 if channel["id"] == id:
                     i = 0
@@ -510,7 +546,7 @@ async def addon_stream(request: Request,config, type, id,):
             return respond_with(streams)
             
         elif "tt" in id or "tmdb" in id or "kitsu" in id:
-            # CODICE ORIGINALE PER FILM E SERIE (invariato)
+            # CODICE ORIGINALE FILM/SERIE (mantenuto invariato)
             print(f"Handling movie or series: {id}")
             if "kitsu" in id:
                 if provider_maps['ANIMEWORLD'] == "1" and AW == "1":
