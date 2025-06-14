@@ -71,6 +71,31 @@
               "AW_ForwardProxy":"0",
               "AW_PROXY":"0"
           },
+  "AnimeWorld": {
+    "Domain": "https://www.animeworld.so",
+    "enabled": "1",
+    "AnimeWorld_ForwardProxy": "0",
+    "AnimeWorld_Proxy": "0"
+  },
+  "AnimeSaturn": {
+    "Domain": "https://www.animesaturn.tv",
+    "enabled": "1",
+    "AnimeSaturn_ForwardProxy": "0",
+    "AnimeSaturn_Proxy": "0"
+  },
+  "AnimeUnity": {
+    "Domain": "https://www.animeunity.to",
+    "enabled": "1",
+    "AnimeUnity_ForwardProxy": "0",
+    "AnimeUnity_Proxy": "0"
+  },
+  "GogoAnime": {
+    "Domain": "https://gogoanime3.co",
+    "enabled": "1",
+    "GogoAnime_ForwardProxy": "0",
+    "GogoAnime_Proxy": "0"
+  },
+
           "SkyStreaming":{
               "url":"https://skystreaming.watch",
               "enabled":"1"
@@ -84,8 +109,8 @@
        "load_env": "0",
        "HOST": "0.0.0.0",
        "PORT": "8080",
-       "Name": "MammaMia",
-       "Icon": "🍕️",
+       "Name": "MammaMiaAnime",
+       "Icon": "🐸",
        "Public_Instance": "0",
        "Remote_Instance": "1",
        "Global_Proxy": "0"
