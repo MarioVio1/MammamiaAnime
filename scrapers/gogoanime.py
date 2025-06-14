@@ -10,11 +10,10 @@ class GogoAnimeScraper(BaseScraper):
     def __init__(self):
         super().__init__()
         self.name = "GogoAnime"
-        self.base_url = config.GA_DOMAIN
+        # Usa Anitaku (nuovo nome di GogoAnime)
+        self.base_url = "https://www.anitaku.to"
         self.enabled = config.GA == "1"
-        
-    def search(self, query):
-        if not self.enabled:
+
             return []
             
         try:
