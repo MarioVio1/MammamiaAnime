@@ -66,6 +66,8 @@ if MYSTERIUS == "1":
     from Src.API.cool import cool
 
 DDL_DOMAIN = config.DDL_DOMAIN
+
+# INIZIALIZZA FASTAPI
 app = FastAPI()
 app.include_router(m3u8_clone)
 limiter = Limiter(key_func=get_remote_address)
@@ -73,12 +75,12 @@ app.state.limiter = limiter
 app.add_middleware(SlowAPIMiddleware)
 User_Agent = "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:127.0) Gecko/20100101 Firefox/127.0"
 
-# MANIFEST CONFORME ALLA SPECIFICA STREMIO
+# MANIFEST - CONFORME SPECIFICA STREMIO
 MANIFEST = {
     "id": "org.stremio.mammamia",
     "version": "1.5.0",
     "name": Name,
-    "description": "Addon providing HTTPS Streams for Italian Movies, Series, and Live TV!",
+    "description": "Addon providing HTTPS Streams for Italian Movies, Series, and Live TV! Note that you need to have Kitsu Addon installed in order to watch Anime",
     "logo": "https://creazilla-store.fra1.digitaloceanspaces.com/emojis/49647/pizza-emoji-clipart-md.png",
     "resources": ["stream", "catalog", "meta"],
     "types": ["movie", "series", "tv"],
@@ -120,17 +122,28 @@ async def transform_mfp(mfp_stream_url, client):
         print("Transforming MFP failed", e)
         return None
 
+# ENDPOINT ROOT
+@app.get('/', response_class=HTMLResponse)
+def root(request: Request):
+    forwarded_proto = request.headers.get("x-forwarded-proto")
+    scheme = forwarded_proto if forwarded_proto else request.url.scheme
+    instance_url = f"{scheme}://{request.url.netloc}"
+    html_content = HTML.replace("{instance_url}", instance_url)
+    return html_content
+
+# ENDPOINT CONFIG
 @app.get('/config')
 def config_redirect():
     return RedirectResponse(url="/")
 
-# ENDPOINT MANIFEST OBBLIGATORIO
+# ENDPOINT MANIFEST BASE - OBBLIGATORIO
 @app.get('/manifest.json')
 def base_manifest():
     """Endpoint manifest base richiesto da Stremio"""
-    print("📋 Manifest request received")
+    print("📋 Base manifest request")
     return respond_with(MANIFEST)
 
+# ENDPOINT MANIFEST CON CONFIGURAZIONE
 @app.get('/{config:path}/manifest.json')
 def addon_manifest(config: str):
     print(f"📋 Manifest with config: {config}")
@@ -144,14 +157,7 @@ def addon_manifest(config: str):
             manifest_copy["resources"].remove("catalog")
         return respond_with(manifest_copy)
 
-@app.get('/', response_class=HTMLResponse)
-def root(request: Request):
-    forwarded_proto = request.headers.get("x-forwarded-proto")
-    scheme = forwarded_proto if forwarded_proto else request.url.scheme
-    instance_url = f"{scheme}://{request.url.netloc}"
-    html_content = HTML.replace("{instance_url}", instance_url)
-    return html_content
-
+# RESTO DEGLI ENDPOINT (catalogs, meta, stream) - CODICE ORIGINALE
 async def addon_catalog(type: str, id: str, genre: str = None):
     if type != "tv":
         raise HTTPException(status_code=404)
