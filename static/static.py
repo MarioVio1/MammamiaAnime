@@ -67,8 +67,8 @@ HTML = """
         }
         .provider-group {
             display: flex;
-            align-items: center; /* Vertically align items */
-            justify-content: space-between; /* Spread items across the available space */
+            align-items: center;
+            justify-content: space-between;
             margin-bottom: 2vh;
             background: rgba(255, 255, 255, 0.1);
             padding: 1.5vh;
@@ -76,22 +76,26 @@ HTML = """
             overflow: hidden;
             width: 100%;
         }
+        .anime-provider {
+            background: rgba(255, 107, 107, 0.2);
+            border: 1px solid rgba(255, 107, 107, 0.4);
+        }
         .provider-group label {
             display: flex;
-            align-items: center; /* Align items within label vertically centered */
+            align-items: center;
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
-            flex-grow: 1; /* Let the label take as much space as possible */
+            flex-grow: 1;
             font-size: 2.2vh;
         }
         .fast-search {
             display: flex;
-            align-items: center; /* Align the Fast Search checkbox vertically centered */
-            margin-left: 10px; /* Space between provider and Fast Search */
+            align-items: center;
+            margin-left: 10px;
         }
         .fast-search input[type="checkbox"] {
-            margin-right: 0.5vh; /* Space between the checkbox and label */
+            margin-right: 0.5vh;
             width: 3vh;
             height: 3vh;
         }
@@ -165,7 +169,12 @@ HTML = """
             font-size: 1.8vh;
             text-align: left;
         }
-        /* Responsive adjustments for smaller screens */
+        .section-title {
+            font-size: 2.5vh;
+            color: #ff6b6b;
+            margin: 3vh 0 2vh 0;
+            font-weight: bold;
+        }
         @media (max-width: 600px) {
             .provider-group label {
                 font-size: 2vh;
@@ -180,7 +189,7 @@ HTML = """
             <img src="https://creazilla-store.fra1.digitaloceanspaces.com/emojis/49647/pizza-emoji-clipart-md.png" alt="Logo">
         </div>
         <h1 class="name">Mamma Mia</h1>
-        <h2 class="version">v1.5.0</h2>
+        <h2 class="version">v1.6.0</h2>
         <div id="additionalText">
             <h2>This addon provides Movie, Series, Anime, and Live TV HTTPS Streams.<br> https://github.com/UrloMythus/MammaMia/</h2>
         </div>
@@ -197,45 +206,36 @@ HTML = """
                     <input type="checkbox" id="streamingwatch"> StreamingWatch
                 </label>
             </div>
-            <div class="provider-group">
+            
+            <!-- SEZIONE ANIME -->
+            <div class="section-title">🎌 Anime Providers</div>
+            
+            <div class="provider-group anime-provider">
                 <label for="animeworld" class="provider-label">
-                    <input type="checkbox" id="animeworld"> Animeworld
+                    <input type="checkbox" id="animeworld"> AnimeWorld
                 </label>
             </div>
-            # Aggiungi dopo la sezione AnimeWorld esistente
-
-# AnimeSaturn Section
-animesaturn_enabled = config.get('AnimeSaturn', {}).get('enabled', '1') == '1'
-html_content += f'''
-<div class="form-group">
-    <label class="form-label">
-        <input type="checkbox" name="AnimeSaturn" value="1" {"checked" if animesaturn_enabled else ""}>
-        <span class="site-name">AnimeSaturn</span>
-        <span class="site-description">Anime italiani e sottotitolati</span>
-    </label>
-</div>
-
-# AnimeUnity Section  
-animeunity_enabled = config.get('AnimeUnity', {}).get('enabled', '1') == '1'
-html_content += f'''
-<div class="form-group">
-    <label class="form-label">
-        <input type="checkbox" name="AnimeUnity" value="1" {"checked" if animeunity_enabled else ""}>
-        <span class="site-name">AnimeUnity</span>
-        <span class="site-description">Anime con doppiaggio e sottotitoli italiani</span>
-    </label>
-</div>
-
-# GogoAnime Section
-gogoanime_enabled = config.get('GogoAnime', {}).get('enabled', '1') == '1'  
-html_content += f'''
-<div class="form-group">
-    <label class="form-label">
-        <input type="checkbox" name="GogoAnime" value="1" {"checked" if gogoanime_enabled else ""}>
-        <span class="site-name">GogoAnime</span>
-        <span class="site-description">Anime in inglese sottotitolato</span>
-    </label>
-</div>
+            
+            <div class="provider-group anime-provider">
+                <label for="animesaturn" class="provider-label">
+                    <input type="checkbox" id="animesaturn"> AnimeSaturn
+                </label>
+            </div>
+            
+            <div class="provider-group anime-provider">
+                <label for="animeunity" class="provider-label">
+                    <input type="checkbox" id="animeunity"> AnimeUnity
+                </label>
+            </div>
+            
+            <div class="provider-group anime-provider">
+                <label for="gogoanime" class="provider-label">
+                    <input type="checkbox" id="gogoanime"> GogoAnime
+                </label>
+            </div>
+            
+            <!-- FINE SEZIONE ANIME -->
+            
             <p>To use the following provider you need to have a local instance/ set the proxy enviroment variable... Leave it as it is if you do not know what this is about
             </p>
             <div class="provider-group">
@@ -249,7 +249,7 @@ html_content += f'''
                 </label>
             </div>
             <div class="provider-group">
-                <label for="guardahd" class="provider-label">
+                <label for="onlineserietv" class="provider-label">
                     <input type="checkbox" id="onlineserietv"> OnlineSerieTV
                 </label>
             </div>
@@ -338,6 +338,9 @@ html_content += f'''
             "fast_search_tf": "TF_FS",
             "filmpertutti": "FT",
             "animeworld": "AW",
+            "animesaturn": "AS",
+            "animeunity": "AU", 
+            "gogoanime": "GA",
             "livetv": "LIVETV",
             "cb01": "CB",
             "ddlstream": "DDL",
