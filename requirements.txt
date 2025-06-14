@@ -9,3 +9,4 @@ lxml
 slowapi
 curl_cffi
 fake-headers
+beautifulsoup4>=4.12.0
