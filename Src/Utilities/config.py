@@ -21,6 +21,13 @@ DLHD_DOMAIN = SITE['DaddyLiveHD']['url']
 GS_DOMAIN = SITE['Guardaserie']['url']
 GHD_DOMAIN = SITE['GuardaHD']['url']
 OST_DOMAIN = SITE['Onlineserietv']['domain']
+
+# NUOVI DOMINI ANIME
+AS_DOMAIN = SITE['AnimeSaturn']['url']
+AU_DOMAIN = SITE['AnimeUnity']['url']
+GA_DOMAIN = SITE['GogoAnime']['url']
+
+# CONFIGURAZIONI ENABLED ESISTENTI
 SC = SITE['StreamingCommunity']['enabled']
 FT = SITE['Filmpertutti']['enabled']
 TF = SITE['Tantifilm']['enabled']
@@ -35,6 +42,13 @@ GS = SITE['Guardaserie']['enabled']
 GHD = SITE['GuardaHD']['enabled']
 OST = SITE['Onlineserietv']['enabled']
 DLHD = SITE['DaddyLiveHD']['enabled']
+
+# NUOVE CONFIGURAZIONI ENABLED ANIME
+AS = SITE['AnimeSaturn']['enabled']
+AU = SITE['AnimeUnity']['enabled']
+GA = SITE['GogoAnime']['enabled']
+
+# CONFIGURAZIONI PROXY ESISTENTI
 TF_ForwardProxy = SITE['Tantifilm']["TF_ForwardProxy"]
 SC_ForwardProxy = SITE['StreamingCommunity']["SC_ForwardProxy"]
 GS_ForwardProxy = SITE['Guardaserie']["GS_ForwardProxy"]
@@ -44,6 +58,13 @@ AW_ForwardProxy = SITE['AnimeWorld']["AW_ForwardProxy"]
 MX_ForwardProxy = SITE['CB01']["MX_ForwardProxy"]
 CB_ForwardProxy = SITE['CB01']["CB_ForwardProxy"]
 OST_ForwardProxy = SITE['Onlineserietv']["OST_ForwardProxy"]
+
+# NUOVE CONFIGURAZIONI PROXY ANIME
+AS_ForwardProxy = SITE['AnimeSaturn']["AnimeSaturn_ForwardProxy"]
+AU_ForwardProxy = SITE['AnimeUnity']["AnimeUnity_ForwardProxy"]
+GA_ForwardProxy = SITE['GogoAnime']["GogoAnime_ForwardProxy"]
+
+# CONFIGURAZIONI PROXY ESISTENTI
 GS_PROXY = SITE['Guardaserie']["GS_PROXY"]
 GH_PROXY = SITE['GuardaHD']["GH_PROXY"]
 TF_PROXY = SITE['Tantifilm']["TF_PROXY"]
@@ -53,10 +74,18 @@ VX_PROXY = SITE['StreamingCommunity']["VX_PROXY"]
 AW_PROXY = SITE['AnimeWorld']["AW_PROXY"]
 MX_PROXY = SITE['CB01']["MX_PROXY"]
 OST_PROXY = SITE['Onlineserietv']["OST_PROXY"]
+
+# NUOVE CONFIGURAZIONI PROXY ANIME
+AS_PROXY = SITE['AnimeSaturn']["AnimeSaturn_Proxy"]
+AU_PROXY = SITE['AnimeUnity']["AnimeUnity_Proxy"]
+GA_PROXY = SITE['GogoAnime']["GogoAnime_Proxy"]
+
+# CONFIGURAZIONI COOKIES DDL
 ips4_device_key = SITE['DDLStream']['cookies']["ips4_device_key"]
 ips4_IPSSessionFront = SITE['DDLStream']['cookies']["ips4_IPSSessionFront"]
 ips4_member_id = SITE['DDLStream']['cookies']["ips4_member_id"]
 ips4_login_key = SITE['DDLStream']['cookies']["ips4_login_key"]
+
 #General
 GENERAL = config['General']
 dotenv = GENERAL["load_env"]
@@ -66,4 +95,4 @@ Icon = GENERAL["Icon"]
 Name = GENERAL["Name"]
 Public_Instance = GENERAL["Public_Instance"]
 Remote_Instance = GENERAL["Remote_Instance"]
-Global_Proxy =  GENERAL["Global_Proxy"]
+Global_Proxy = GENERAL["Global_Proxy"]
