@@ -78,30 +78,30 @@ User_Agent = "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:127.0) Gecko/20100101 F
 # MANIFEST - CONFORME SPECIFICA STREMIO
 MANIFEST = {
     "id": "org.stremio.mammamia",
-    "version": "1.5.0",
-    "name": Name,
-    "description": "Addon providing HTTPS Streams for Italian Movies, Series, and Live TV! Note that you need to have Kitsu Addon installed in order to watch Anime",
-    "logo": "https://creazilla-store.fra1.digitaloceanspaces.com/emojis/49647/pizza-emoji-clipart-md.png",
-    "resources": ["stream", "catalog", "meta"],
-    "types": ["movie", "series", "tv"],
+    "version": "1.6.0",
     "catalogs": [
         {
             "type": "tv",
             "id": "tv_channels",
-            "name": "MammaMia",
+            "name": "MammaMiaAnime",
             "behaviorHints": {
                 "configurable": True,
                 "configurationRequired": True
-            },
+                },
             "extra": [
                 {
                     "name": "genre",
                     "isRequired": False,
-                    "options": ["Rai", "Mediaset", "Sky", "Euronews", "La7", "Warner Bros", "FIT", "Sportitalia", "RSI", "DAZN", "Rakuten", "Pluto", "A+E", "Paramount", "Chill"]
+                    "options": ["Rai", "Mediaset", "Sky", "Euronews", "La7", "Warner Bros", "FIT", "Sportitalia","RSI","DAZN", "Rakuten", "Pluto", "A+E", "Paramount", "Chill"]
                 }
             ]
         }
-    ]
+    ],
+    "resources": ["stream", "catalog", "meta"],
+    "types": ["movie", "series", "tv"],
+    "name": Name,
+    "description": "Addon providing HTTPS Streams for Italian Movies, Series, and Live TV! Note that you need to have Kitsu Addon installed in order to watch Anime",
+    "logo": "https://creazilla-store.fra1.digitaloceanspaces.com/emojis/49647/pizza-emoji-clipart-md.png"
 }
 
 def respond_with(data):
