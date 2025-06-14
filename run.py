@@ -1,3 +1,4 @@
+from datetime import datetime
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse, RedirectResponse, HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -278,6 +279,87 @@ def root(request: Request):
     instance_url = f"{scheme}://{request.url.netloc}"
     html_content = HTML.replace("{instance_url}", instance_url)
     return html_content
+@app.get('/test-scrapers')
+async def test_scrapers():
+    """Endpoint per testare i scrapers anime"""
+    print("🧪 Testing scrapers endpoint called")
+    
+    results = {
+        "timestamp": str(datetime.now()),
+        "scrapers_available": len(anime_scrapers),
+        "scrapers": {}
+    }
+    
+    if not anime_scrapers:
+        results["error"] = "No anime scrapers available"
+        results["anime_scrapers_loaded"] = ANIME_SCRAPERS_AVAILABLE
+        return results
+    
+    for site_name, scraper in anime_scrapers.items():
+        print(f"🔍 Testing {site_name}...")
+        
+        try:
+            # Test ricerca base
+            search_results = scraper.search("naruto")
+            
+            site_results = {
+                "status": "working",
+                "base_url": scraper.base_url,
+                "search_results_count": len(search_results),
+                "error": None
+            }
+            
+            if search_results:
+                first_anime = search_results[0]
+                site_results["sample_result"] = {
+                    "title": first_anime.get('title', 'No title'),
+                    "url": first_anime.get('url', 'No URL'),
+                    "image": first_anime.get('image', 'No image')
+                }
+                
+                # Test episodi (solo per il primo risultato)
+                try:
+                    episodes = scraper.get_episodes(first_anime['url'])
+                    site_results["episodes_count"] = len(episodes)
+                    
+                    if episodes:
+                        site_results["sample_episode"] = {
+                            "title": episodes[0].get('title', 'No title'),
+                            "number": episodes[0].get('number', 'No number'),
+                            "url": episodes[0].get('url', 'No URL')
+                        }
+                        
+                        # Test stream (solo per primo episodio)
+                        try:
+                            streams = scraper.get_stream_links(episodes[0]['url'])
+                            site_results["streams_count"] = len(streams)
+                            
+                            if streams:
+                                site_results["sample_stream"] = {
+                                    "url": streams[0].get('url', 'No URL'),
+                                    "quality": streams[0].get('quality', 'Unknown'),
+                                    "type": streams[0].get('type', 'Unknown')
+                                }
+                        except Exception as stream_error:
+                            site_results["stream_error"] = str(stream_error)
+                            
+                except Exception as episode_error:
+                    site_results["episode_error"] = str(episode_error)
+            else:
+                site_results["status"] = "no_results"
+            
+            results["scrapers"][site_name] = site_results
+            
+        except Exception as e:
+            results["scrapers"][site_name] = {
+                "status": "error",
+                "base_url": getattr(scraper, 'base_url', 'Unknown'),
+                "error": str(e)
+            }
+            print(f"❌ {site_name} error: {e}")
+    
+    return results
+
 
 # CATALOGHI
 async def addon_catalog(type: str, id: str, genre: str = None, search: str = None):
