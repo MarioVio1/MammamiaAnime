@@ -13,12 +13,18 @@ import  Src.Utilities.config as config
 import logging
 from Src.API.okru import okru_get_url
 from Src.API.animeworld import animeworld
+
+# NUOVE IMPORTAZIONI ANIME
+from scrapers.animesaturn import AnimeSaturnScraper
+from scrapers.animeunity import AnimeUnityScraper
+from scrapers.gogoanime import GogoAnimeScraper
+
 from Src.Utilities.dictionaries import okru,STREAM,extra_sources,webru_vary,webru_dlhd,provider_map,skystreaming
 from Src.API.epg import tivu, tivu_get,epg_guide,convert_bho_1,convert_bho_2,convert_bho_3
 from Src.API.webru import webru,get_skystreaming
 from Src.API.onlineserietv import onlineserietv
 from curl_cffi.requests import AsyncSession
-from Src.API.omgtv import get_omgtv_streams_for_channel_id # Importa la nuova funzione
+from Src.API.omgtv import get_omgtv_streams_for_channel_id
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 from slowapi.middleware import SlowAPIMiddleware
@@ -26,6 +32,8 @@ from static.static import HTML
 from urllib.parse import unquote
 from Src.Utilities.m3u8 import router as m3u8_clone
 import urllib.parse
+import re
+
 #Configure Env Vars
 Global_Proxy = config.Global_Proxy
 if Global_Proxy == "1":
@@ -38,6 +46,7 @@ if Global_Proxy == "1":
 }
 else:
     proxies = {}
+
 # Configure config
 MYSTERIUS = config.MYSTERIUS
 DLHD = config.DLHD
@@ -60,6 +69,14 @@ Icon = config.Icon
 Name = config.Name
 SKY_DOMAIN = config.SKY_DOMAIN
 Remote_Instance = config.Remote_Instance
+
+# INIZIALIZZAZIONE SCRAPERS ANIME
+anime_scrapers = {
+    'animesaturn': AnimeSaturnScraper(),
+    'animeunity': AnimeUnityScraper(),
+    'gogoanime': GogoAnimeScraper()
+}
+
     #Cool code to set the hugging face if the service is hosted there.
 if MYSTERIUS == "1":
     from Src.API.cool import cool
@@ -70,9 +87,11 @@ limiter = Limiter(key_func=get_remote_address)
 app.state.limiter = limiter
 app.add_middleware(SlowAPIMiddleware)
 User_Agent= "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:127.0) Gecko/20100101 Firefox/127.0"
+
+# MANIFEST AGGIORNATO CON SUPPORTO ANIME
 MANIFEST = {
     "id": "org.stremio.mammamia",
-    "version": "1.5.0",
+    "version": "1.6.0",  # Incrementata versione
     "catalogs": [
         {
             "type": "tv",
@@ -89,21 +108,38 @@ MANIFEST = {
                     "options": ["Intrattenimento", "Film & Serie", "Documentari", "Sport", "Sky", "DAZN", "Rai", "Mediaset", "La7", "Discovery", "Sportitalia", "RSI", "Rakuten", "Pluto" ]
                 }
             ]
+        },
+        # NUOVI CATALOGHI ANIME
+        {
+            "type": "series",
+            "id": "anime_search",
+            "name": "Cerca Anime",
+            "extra": [
+                {
+                    "name": "search",
+                    "isRequired": True
+                }
+            ]
+        },
+        {
+            "type": "series",
+            "id": "anime_popular",
+            "name": "Anime Popolari"
         }
     ],
     "resources": ["stream", "catalog", "meta"],
     "types": ["movie", "series", "tv"],
     "name": Name,
-    "description": "Addon providing HTTPS Streams for Italian Movies, Series, and Live TV! Note that you need to have Kitsu Addon installed in order to watch Anime",
+    "description": "Addon providing HTTPS Streams for Italian Movies, Series, Live TV and Anime from multiple sources!",
     "logo": "https://creazilla-store.fra1.digitaloceanspaces.com/emojis/49647/pizza-emoji-clipart-md.png"
 }
-
 
 def respond_with(data):
     resp = JSONResponse(data)
     resp.headers['Access-Control-Allow-Origin'] = '*'
     resp.headers['Access-Control-Allow-Headers'] = '*'
     return resp
+
 async def transform_mfp(mfp_stream_url,client):
     try:
         response = await client.get(mfp_stream_url)
@@ -111,22 +147,56 @@ async def transform_mfp(mfp_stream_url,client):
         url = data['mediaflow_proxy_url'] + "?api_password=" + data['query_params']['api_password'] + "&d=" + urllib.parse.quote(data['destination_url'])
         for i in data['request_headers']:
             url += f"&h_{i}={urllib.parse.quote(data['request_headers'][i])}"
-
-
         return url
     except Exception as e:
         print("Transforing MFP failed",e)
         return None
+
+# FUNZIONE PER RICERCA ANIME
+async def search_anime_multi_source(query: str, client):
+    """Cerca anime su tutti i siti configurati"""
+    all_results = []
+    
+    for site_name, scraper in anime_scrapers.items():
+        try:
+            print(f"Searching {site_name} for: {query}")
+            results = scraper.search(query)
+            for result in results:
+                result['source_site'] = site_name
+            all_results.extend(results)
+        except Exception as e:
+            print(f"Error searching {site_name}: {e}")
+    
+    return all_results
+
+# FUNZIONE PER DEDUPLICAZIONE RISULTATI ANIME
+def deduplicate_anime_results(results):
+    """Rimuove duplicati basandosi sul titolo normalizzato"""
+    seen = {}
+    unique_results = []
+    
+    for result in results:
+        # Normalizza titolo per confronto
+        normalized_title = re.sub(r'[^\w\s]', '', result['title'].lower()).strip()
+        normalized_title = re.sub(r'\s+', ' ', normalized_title)
+        
+        if normalized_title not in seen:
+            seen[normalized_title] = result
+            unique_results.append(result)
+    
+    return unique_results
+
 @app.get('/config')
 def config():
     return RedirectResponse(url="/")
+
 @app.get('/{config:path}/manifest.json')
 def addon_manifest(config: str): 
     manifest_copy = MANIFEST.copy()  
     if "LIVETV"  in config:
         return respond_with(manifest_copy)
     elif "LIVETV" not in config:
-        manifest_copy["catalogs"] = []
+        manifest_copy["catalogs"] = [cat for cat in manifest_copy["catalogs"] if cat["type"] != "tv"]
         if "catalog" in manifest_copy["resources"]:
             manifest_copy["resources"].remove("catalog")
         return respond_with(manifest_copy)
@@ -142,36 +212,77 @@ def root(request: Request):
     instance_url = f"{scheme}://{request.url.netloc}"
     html_content = HTML.replace("{instance_url}", instance_url)
     return html_content
-async def addon_catalog(type: str, id: str, genre: str = None):
-    if type != "tv":
-        raise HTTPException(status_code=404)
-    
-    catalogs = {"metas": []}
-    
-    for channel in STREAM["channels"]:
-        if genre and genre not in channel.get("genres", []):
-            continue  # Skip channels that don't match the selected genre
-        
-        description = f'Watch {channel["title"]}'
-        catalogs["metas"].append({
-            "id": channel["id"],
-            "type": "tv",
-            "name": channel["title"],
-            "poster": channel["poster"],  # Add poster URL if available
-            "description": description,
-            "genres": channel.get("genres", [])
-        })
 
-    return catalogs
+async def addon_catalog(type: str, id: str, genre: str = None, search: str = None):
+    if type == "tv":
+        catalogs = {"metas": []}
+        
+        for channel in STREAM["channels"]:
+            if genre and genre not in channel.get("genres", []):
+                continue
+            
+            description = f'Watch {channel["title"]}'
+            catalogs["metas"].append({
+                "id": channel["id"],
+                "type": "tv",
+                "name": channel["title"],
+                "poster": channel["poster"],
+                "description": description,
+                "genres": channel.get("genres", [])
+            })
+        
+        return catalogs
+    
+    # GESTIONE CATALOGHI ANIME
+    elif type == "series" and id.startswith("anime_"):
+        catalogs = {"metas": []}
+        
+        if id == "anime_search" and search:
+            async with AsyncSession(proxies=proxies) as client:
+                # Ricerca anime su tutti i siti
+                anime_results = await search_anime_multi_source(search, client)
+                anime_results = deduplicate_anime_results(anime_results)
+                
+                for anime in anime_results:
+                    # Genera ID unico per ogni anime
+                    anime_id = f"anime_{anime['source_site']}_{anime['title'].replace(' ', '_').lower()}"
+                    anime_id = re.sub(r'[^\w_]', '', anime_id)
+                    
+                    catalogs["metas"].append({
+                        "id": anime_id,
+                        "type": "series",
+                        "name": anime['title'],
+                        "poster": anime.get('image'),
+                        "description": f"Anime da {anime['source_site'].upper()}",
+                        "genres": ["Anime"],
+                        "imdbRating": None
+                    })
+        
+        elif id == "anime_popular":
+            # Placeholder per anime popolari - implementare se necessario
+            catalogs["metas"] = []
+        
+        return catalogs
+    
+    else:
+        raise HTTPException(status_code=404)
+
 @app.get('/{config:path}/catalog/{type}/{id}.json')
 @limiter.limit("5/second")
-async def first_catalog(request: Request,type: str, id: str, genre: str = None):
-    catalogs = await addon_catalog(type, id,genre)
+async def first_catalog(request: Request, type: str, id: str, genre: str = None):
+    search = request.query_params.get('search')
+    catalogs = await addon_catalog(type, id, genre, search)
     return respond_with(catalogs)
 
 @app.get('/{config:path}/catalog/{type}/{id}/genre={genre}.json')
-async def first_catalog(type: str, id: str, genre: str = None):
-    catalogs = await addon_catalog(type, id,genre)
+async def catalog_with_genre(type: str, id: str, genre: str = None):
+    catalogs = await addon_catalog(type, id, genre)
+    return respond_with(catalogs)
+
+# NUOVO ENDPOINT PER RICERCA ANIME CON PARAMETRI EXTRA
+@app.get('/{config:path}/catalog/{type}/{id}/search={search}.json')
+async def catalog_with_search(request: Request, type: str, id: str, search: str):
+    catalogs = await addon_catalog(type, id, search=search)
     return respond_with(catalogs)
 
 @app.get('/{config:path}/meta/tv/{id}.json')
@@ -200,16 +311,40 @@ async def addon_meta(request: Request,id: str):
             'poster': channel['poster'],
             'posterShape': 'landscape',
             'description': title + "\n" + description,
-            # Additional fields can be added here
-            'background': channel['poster'],  # Example of using the same poster as background
+            'background': channel['poster'],
             'logo': channel['poster'],
-            'genres': channel.get('genres', []),  # Example of using the same poster as logo
+            'genres': channel.get('genres', []),
         }
     }
     if 'url' in channel:
-        meta['meta']['url'] = channel['url']  # Using the stream URL as a website link
+        meta['meta']['url'] = channel['url']
     return respond_with(meta)
 
+# NUOVO ENDPOINT META PER ANIME
+@app.get('/{config:path}/meta/series/{id}.json')
+@limiter.limit("20/second")
+async def anime_meta(request: Request, id: str):
+    if id.startswith('anime_'):
+        # Estrai informazioni dall'ID
+        parts = id.split('_')
+        if len(parts) >= 3:
+            source_site = parts[1]
+            anime_title = ' '.join(parts[2:]).replace('_', ' ').title()
+            
+            meta = {
+                'meta': {
+                    'id': id,
+                    'type': 'series',
+                    'name': anime_title,
+                    'poster': None,
+                    'description': f"Anime disponibile su {source_site.upper()}",
+                    'genres': ['Anime'],
+                    'imdbRating': None
+                }
+            }
+            return respond_with(meta)
+    
+    raise HTTPException(status_code=404, detail="Anime not found")
 
 @app.get('/{config:path}/stream/{type}/{id}.json')
 @limiter.limit("5/second")
@@ -217,11 +352,63 @@ async def addon_stream(request: Request,config, type, id,):
     if type not in MANIFEST['types']:
         raise HTTPException(status_code=404)
     streams = {'streams': []}
+    
+    # GESTIONE STREAM ANIME
+    if type == "series" and id.startswith('anime_'):
+        async with AsyncSession(proxies=proxies) as client:
+            try:
+                # Estrai informazioni dall'ID anime
+                parts = id.split('_')
+                if len(parts) >= 3:
+                    source_site = parts[1]
+                    anime_title = ' '.join(parts[2:]).replace('_', ' ')
+                    
+                    if source_site in anime_scrapers:
+                        scraper = anime_scrapers[source_site]
+                        
+                        # Prima cerca l'anime per ottenere l'URL
+                        search_results = scraper.search(anime_title)
+                        if search_results:
+                            anime_url = search_results[0]['url']
+                            
+                            # Ottieni episodi
+                            episodes = scraper.get_episodes(anime_url)
+                            
+                            if episodes:
+                                # Per ora prendiamo il primo episodio
+                                first_episode = episodes[0]
+                                stream_links = scraper.get_stream_links(first_episode['url'])
+                                
+                                for i, stream in enumerate(stream_links):
+                                    streams['streams'].append({
+                                        'name': f"{Name} - {source_site.upper()}",
+                                        'title': f'{Icon}{source_site.upper()} - {stream.get("quality", "HD")}',
+                                        'url': stream['url'],
+                                        'behaviorHints': {
+                                            'notWebReady': stream.get('type') == 'iframe',
+                                            'bingeGroup': f'anime_{source_site}'
+                                        }
+                                    })
+                
+                if not streams['streams']:
+                    streams['streams'].append({
+                        'name': f"{Name}",
+                        'title': f'{Icon}Anime non disponibile',
+                        'url': 'https://example.com/not_found.mp4'
+                    })
+                    
+            except Exception as e:
+                print(f"Error getting anime streams: {e}")
+                raise HTTPException(status_code=404)
+                
+        return respond_with(streams)
+    
+    # RESTO DEL CODICE ORIGINALE PER TV E FILM
     if "|" in config:
         config_providers = config.split('|')
-    elif "%7C" in config: # Gestisce l'URL encoding di Stremio per "|"
+    elif "%7C" in config:
         config_providers = config.split('%7C')
-    else: # Caso base se non ci sono provider specifici nella config (improbabile per stream)
+    else:
         config_providers = []
 
     provider_maps = {name: "0" for name in provider_map.values()}
@@ -231,26 +418,21 @@ async def addon_stream(request: Request,config, type, id,):
                 provider_maps[provider_name] = "1"
     
     MFP = "0"
-    MFP_CREDENTIALS = None # Inizializza a None
+    MFP_CREDENTIALS = None
 
     if "MFP[" in config:
-    # Extract proxy data between "MFP(" and ")"
         mfp_data = config.split("MFP[")[1].split(")")[0]  
-    # Split the data by comma to get proxy URL and password
         MFP_url, MFP_password = mfp_data.split(",")
         MFP_password = MFP_password[:-2]
-    # Store them in a list
         MFP_CREDENTIALS = [MFP_url, MFP_password]
         if MFP_url and MFP_password:
             MFP = "1"
-        # Se MFP_url o MFP_password sono vuoti, MFP rimane "0" (dall'inizializzazione)
-        # e MFP_CREDENTIALS conterrà i valori analizzati (potenzialmente vuoti).
     else:
         MFP = "0"
-        # MFP_CREDENTIALS rimane None (dall'inizializzazione).
 
     async with AsyncSession(proxies = proxies) as client:
         if type == "tv":
+            # CODICE ORIGINALE PER TV (invariato)
             for channel in STREAM["channels"]:
                 if channel["id"] == id:
                     i = 0
@@ -291,50 +473,44 @@ async def addon_stream(request: Request,config, type, id,):
                         if DLHD == "1":
                             i = i+1
                             webru_url_2,Referer_webru_url_2,Origin_webru_url_2 = await webru(id,"dlhd",client)
-                            if MFP== "1" and MFP_CREDENTIALS and webru_url_2: # Assicurati che MFP_CREDENTIALS e webru_url_2 esistano
+                            if MFP== "1" and MFP_CREDENTIALS and webru_url_2:
                                 MFP_url, MFP_password = MFP_CREDENTIALS
                                 webru_url_2 = f'{MFP_url}/proxy/hls/manifest.m3u8?api_password={MFP_password}&d={webru_url_2}&h_Referer={Referer_webru_url_2}&h_Origin={Origin_webru_url_2}&h_User-Agent=Mozilla%2F5.0%20(Windows%20NT%2010.0%3B%20Win64%3B%20x64)%20AppleWebKit%2F537.36%20(KHTML%2C%20like%20Gecko)%20Chrome%2F58.0.3029.110%20Safari%2F537.3'
                                 streams['streams'].append({'title': f"{Icon}Proxied Server D-{i} " + channel['title'],'url': webru_url_2})
                             else:
                                 streams['streams'].append({'title': f'{Icon}Server D-{i}' + channel['title'], 'url': webru_url_2, "behaviorHints": {"notWebReady": True, "proxyHeaders": {"request": {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3", "Accept": "*/*", "Accept-Language": "en-US,en;q=0.5", "Origin": Origin_webru_url_2, "DNT": "1", "Sec-GPC": "1", "Connection": "keep-alive", "Referer": Referer_webru_url_2, "Sec-Fetch-Dest": "empty", "Sec-Fetch-Mode": "cors", "Sec-Fetch-Site": "cross-site", "Pragma": "no-cache", "Cache-Control": "no-cache", "TE": "trailers"}}}})
 
-            omgtv_sources_to_try = ["247ita", "calcio", "vavoo", "static"] # Assicurati che "static" sia qui
+            omgtv_sources_to_try = ["247ita", "calcio", "vavoo", "static"]
             channel_name_query_base = id.replace('-', ' ')
-            # print(f"DEBUG RUN.PY: addon_stream per TV ID: {id}, channel_name_query_base: {channel_name_query_base}")
 
             mfp_url_to_pass = MFP_CREDENTIALS[0] if MFP == "1" and MFP_CREDENTIALS else None
             mfp_password_to_pass = MFP_CREDENTIALS[1] if MFP == "1" and MFP_CREDENTIALS else None
-            # print(f"DEBUG RUN.PY: MFP URL da passare: {mfp_url_to_pass}, MFP Password presente: {'Sì' if mfp_password_to_pass else 'No'}")
 
             for omgtv_source in omgtv_sources_to_try:
-                # Construct the full OMGTV-style ID to query
                 omgtv_channel_id_full = f"omgtv-{omgtv_source}-{channel_name_query_base.replace(' ', '-')}"
-                # print(f"DEBUG RUN.PY: Tentativo sorgente OMGTV: {omgtv_source}, ID completo query: {omgtv_channel_id_full}")
                 
                 omgtv_stream_list = await get_omgtv_streams_for_channel_id(
                     channel_id_full=omgtv_channel_id_full,
-                    client=client, # Pass the AsyncSession client
+                    client=client,
                     mfp_url=mfp_url_to_pass,
                     mfp_password=mfp_password_to_pass
                 )
                 if omgtv_stream_list:
                     for stream_item in omgtv_stream_list:
-                        # print(f"DEBUG RUN.PY: Aggiungendo stream da OMGTV ({omgtv_source}): {stream_item.get('title')}")
-                        # Ensure unique titles if multiple OMGTV sources provide the same channel
                         stream_title = f"{Icon}{stream_item.get('title', f'{channel_name_query_base.title()} ({omgtv_source.upper()})')}"
                         streams['streams'].append({
                             'name': f"{Name} - {stream_item.get('group', omgtv_source.upper())}",
                             'title': stream_title,
                             'url': stream_item['url'],
-                            'behaviorHints': stream_item.get('behaviorHints', {"notWebReady": True}) # Default to notWebReady if not specified
+                            'behaviorHints': stream_item.get('behaviorHints', {"notWebReady": True})
                         })
-            # --- END OMGTV Integration ---
             
             if not streams['streams']:
                 raise HTTPException(status_code=404)
             return respond_with(streams)
-        elif "tt" in id or "tmdb" in id or "kitsu" in id:
             
+        elif "tt" in id or "tmdb" in id or "kitsu" in id:
+            # CODICE ORIGINALE PER FILM E SERIE (invariato)
             print(f"Handling movie or series: {id}")
             if "kitsu" in id:
                 if provider_maps['ANIMEWORLD'] == "1" and AW == "1":
@@ -389,7 +565,6 @@ async def addon_stream(request: Request,config, type, id,):
                     if url_filmpertutti is not None and Host is not None:
                         if MFP == "1":
                             url_filmpertutti = f'{MFP_url}/extractor/video?api_password={MFP_password}&d={url_filmpertutti}&host={Host}&redirect_stream=true'
-                            # print(url_filmpertutti) # Rimosso per pulizia log
                             streams['streams'].append({'name': f'{Name}', 'title': f'{Icon}Filmpertutti', 'url': url_filmpertutti,'behaviorHints': {'bingeGroup': 'filmpertutti'}})
                         else:
                             streams['streams'].append({'name': f'{Name}', 'title': f'{Icon}Filmpertutti', 'url': url_filmpertutti,'behaviorHints': {'proxyHeaders': {"request": {"User-Agent": "Mozilla/5.0 (Windows NT 10.10; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3"}}, 'notWebReady': True, 'bingeGroup': 'filmpertutti'}})
@@ -418,7 +593,7 @@ async def addon_stream(request: Request,config, type, id,):
                             url_ddlstream = results[0]
                             quality = results[1]
                             name = unquote(url_ddlstream.split('/')[-1].replace(".mp4",""))
-                            MFP_url, MFP_password = MFP_CREDENTIALS # Assicurati che siano definiti
+                            MFP_url, MFP_password = MFP_CREDENTIALS
                             url_ddlstream = f'{MFP_url}/proxy/stream?api_password={MFP_password}&d={url_ddlstream}&h_Referer=https://ddlstreamitaly.{DDL_DOMAIN}/'
                             streams['streams'].append({'name': f"{Name}\n{quality}",'title': f'{Icon}DDLStream \n {name}', 'url': url_ddlstream, 'behaviorHints': {'bingeGroup': 'ddlstream'}}) 
                 if provider_maps['CB01'] == "1" and CB == "1":
@@ -426,7 +601,7 @@ async def addon_stream(request: Request,config, type, id,):
                     if url_cbo1:
                         print(f"CB01 Found Results for {id}")
                         if "mixdrop" in url_cbo1:
-                            if MFP == "1" and MFP_CREDENTIALS: # Assicurati che MFP_CREDENTIALS esista
+                            if MFP == "1" and MFP_CREDENTIALS:
                                 MFP_url, MFP_password = MFP_CREDENTIALS
                                 url_cbo1 = f'{MFP_url}/extractor/video?api_password={MFP_password}&d={url_cbo1}&host=Mixdrop&redirect_stream=false'
                                 url_cbo1 = await transform_mfp(url_cbo1,client)
@@ -434,7 +609,6 @@ async def addon_stream(request: Request,config, type, id,):
                                     streams['streams'].append({'name': f"{Name}",'title': f'{Icon}CB01', 'url': url_cbo1, 'behaviorHints': {'bingeGroup': 'cb01'}})
                         elif "delivery" in url_cbo1:
                             streams['streams'].append({'name': f'{Name}', 'title': f'{Icon}CB01\n MixDrop Will work only on a local instance!', 'url': url_cbo1,'behaviorHints': {'proxyHeaders': {"request": {"User-Agent": User_Agent}}, 'notWebReady': True, 'bingeGroup': 'cb01'}})
-
                         else:
                             streams['streams'].append({'name': f"{Name}",'title': f'{Icon}CB01\n MaxStream', 'url': url_cbo1, 'behaviorHints': {'bingeGroup': 'cb01'}})
             if provider_maps['GUARDASERIE'] == "1" and GS == "1":
@@ -458,8 +632,6 @@ async def addon_stream(request: Request,config, type, id,):
 
     return respond_with(streams)
 
-
 if __name__ == '__main__':
     import uvicorn
     uvicorn.run("run:app", host=HOST, port=PORT, log_level="info")
-    
