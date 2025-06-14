@@ -1077,7 +1077,11 @@ provider_map = {
         'AW': 'ANIMEWORLD',
         'DDL': 'DDLSTREAM',
         'CB': 'CB01',
+    "AS": "ANIMESATURN",
+    "AU": "ANIMEUNITY", 
+    "GA": "GOGOANIME",
         "GS": "GUARDASERIE",
         "GHD": "GUARDAHD",
         "OST": "ONLINESERIETV",
+        
     }
