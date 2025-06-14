@@ -202,6 +202,40 @@ HTML = """
                     <input type="checkbox" id="animeworld"> Animeworld
                 </label>
             </div>
+            # Aggiungi dopo la sezione AnimeWorld esistente
+
+# AnimeSaturn Section
+animesaturn_enabled = config.get('AnimeSaturn', {}).get('enabled', '1') == '1'
+html_content += f'''
+<div class="form-group">
+    <label class="form-label">
+        <input type="checkbox" name="AnimeSaturn" value="1" {"checked" if animesaturn_enabled else ""}>
+        <span class="site-name">AnimeSaturn</span>
+        <span class="site-description">Anime italiani e sottotitolati</span>
+    </label>
+</div>
+
+# AnimeUnity Section  
+animeunity_enabled = config.get('AnimeUnity', {}).get('enabled', '1') == '1'
+html_content += f'''
+<div class="form-group">
+    <label class="form-label">
+        <input type="checkbox" name="AnimeUnity" value="1" {"checked" if animeunity_enabled else ""}>
+        <span class="site-name">AnimeUnity</span>
+        <span class="site-description">Anime con doppiaggio e sottotitoli italiani</span>
+    </label>
+</div>
+
+# GogoAnime Section
+gogoanime_enabled = config.get('GogoAnime', {}).get('enabled', '1') == '1'  
+html_content += f'''
+<div class="form-group">
+    <label class="form-label">
+        <input type="checkbox" name="GogoAnime" value="1" {"checked" if gogoanime_enabled else ""}>
+        <span class="site-name">GogoAnime</span>
+        <span class="site-description">Anime in inglese sottotitolato</span>
+    </label>
+</div>
             <p>To use the following provider you need to have a local instance/ set the proxy enviroment variable... Leave it as it is if you do not know what this is about
             </p>
             <div class="provider-group">
