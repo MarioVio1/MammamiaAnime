@@ -1,3 +1,4 @@
+from bs4 import BeautifulSoup
 from datetime import datetime
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse, RedirectResponse, HTMLResponse
@@ -411,7 +412,6 @@ async def debug_episode(episode_id: str):
             "page_title": soup.title.text if soup.title else "No title",
             "iframes_count": len(soup.find_all('iframe')),
             "iframes": [iframe.get('src') for iframe in soup.find_all('iframe')],
-            "scripts_count": len(soup.find_all('script')),
             "has_player_div": bool(soup.find('div', id='player')),
             "page_contains_stream": 'stream' in response.text.lower(),
             "page_size": len(response.text)
