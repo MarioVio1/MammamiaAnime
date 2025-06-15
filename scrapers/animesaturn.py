@@ -6,23 +6,28 @@ import Src.Utilities.config as config
 from scrapers.base_scraper import BaseScraper
 
 class AnimeSaturnScraper(BaseScraper):
+    def __init__(self):
+        super().__init__()
+        self.name = "AnimeSaturn"
+        self.base_url = "https://www.animesaturn.cx"
+        self.enabled = getattr(config, 'AS', '0') == "1"  # ✅ FIX PRINCIPALE
+        self.search_url = f"{self.base_url}/animelist"
+        
     def search(self, query):
         if not self.enabled:
             return []
             
         try:
-            # METODO 1: Ricerca diretta
-            search_url = f"{self.base_url}/animelist"
             search_params = {'search': query}
-            response = self.make_request(search_url, params=search_params)
+            response = self.make_request(self.search_url, params=search_params)
             soup = BeautifulSoup(response.text, 'html.parser')
             
             results = []
             
-            # SELETTORI AGGIORNATI per AnimeSaturn 2025
+            # Selettori aggiornati per AnimeSaturn
             selectors_to_try = [
                 'div.item-archivio',
-                'div.anime-card',
+                'div.anime-card', 
                 'div.card',
                 '.anime-item',
                 'a[href*="/anime/"]'
@@ -36,8 +41,7 @@ class AnimeSaturnScraper(BaseScraper):
                     break
             
             if not anime_items:
-                print("❌ No items found with any selector")
-                # FALLBACK: Cerca tutti i link che contengono "anime"
+                # Fallback: cerca tutti i link anime
                 anime_items = soup.find_all('a', href=re.compile(r'/anime/'))
                 print(f"🔄 Fallback found {len(anime_items)} anime links")
             
@@ -52,7 +56,7 @@ class AnimeSaturnScraper(BaseScraper):
                             continue
                         title = link_elem.get('title', '').strip()
                         if not title:
-                            title_elem = item.find(['h3', 'h2', '.title', '.anime-title'])
+                            title_elem = item.find(['h3', 'h2', '.title'])
                             title = title_elem.text.strip() if title_elem else ''
                     
                     if not title or not link_elem:
@@ -69,7 +73,6 @@ class AnimeSaturnScraper(BaseScraper):
                             image = urljoin(self.base_url, img_src)
                     
                     if title and url and '/anime/' in url:
-                        print(f"   Found: {title} - {url}")
                         results.append({
                             'title': title,
                             'url': url,
@@ -78,7 +81,6 @@ class AnimeSaturnScraper(BaseScraper):
                         })
                         
                 except Exception as e:
-                    print(f"Error parsing item: {e}")
                     continue
             
             print(f"🎯 AnimeSaturn search returned {len(results)} results")
@@ -86,10 +88,7 @@ class AnimeSaturnScraper(BaseScraper):
             
         except Exception as e:
             print(f"AnimeSaturn search error: {e}")
-            import traceback
-            traceback.print_exc()
             return []
-
     
     def get_episodes(self, anime_url):
         if not self.enabled:
@@ -119,7 +118,7 @@ class AnimeSaturnScraper(BaseScraper):
                         'url': episode_url
                     })
                     
-                except Exception as e:
+                except Exception:
                     continue
                     
             return sorted(episodes, key=lambda x: x['number'])
@@ -128,12 +127,11 @@ class AnimeSaturnScraper(BaseScraper):
             print(f"AnimeSaturn episodes error: {e}")
             return []
     
-    def get_stream_links(self, episode_url):  # ← LINEA 173 CORRETTA
-        if not self.enabled:  # ← INDENTAZIONE CORRETTA
+    def get_stream_links(self, episode_url):
+        if not self.enabled:
             return []
             
         try:
-            print(f"🔗 Getting streams from: {episode_url}")
             response = self.make_request(episode_url)
             soup = BeautifulSoup(response.text, 'html.parser')
             
@@ -141,39 +139,18 @@ class AnimeSaturnScraper(BaseScraper):
             
             # Cerca iframe video
             iframes = soup.find_all('iframe')
-            print(f"📺 Found {len(iframes)} iframes")
-            
             for iframe in iframes:
                 src = iframe.get('src')
-                if src:
-                    print(f"   Iframe src: {src}")
-                    if any(host in src.lower() for host in ['vixcloud', 'streamingaw', 'streamtape', 'mixdrop', 'doodstream']):
-                        if not src.startswith('http'):
-                            src = urljoin(self.base_url, src)
-                        
-                        streams.append({
-                            'url': src,
-                            'quality': 'HD',
-                            'type': 'iframe'
-                        })
+                if src and any(host in src.lower() for host in ['vixcloud', 'streamingaw', 'streamtape', 'mixdrop']):
+                    if not src.startswith('http'):
+                        src = urljoin(self.base_url, src)
+                    
+                    streams.append({
+                        'url': src,
+                        'quality': 'HD',
+                        'type': 'iframe'
+                    })
             
-            # Cerca video tag diretti
-            video_tags = soup.find_all('video')
-            for video in video_tags:
-                sources = video.find_all('source')
-                for source in sources:
-                    src = source.get('src')
-                    if src:
-                        if not src.startswith('http'):
-                            src = urljoin(self.base_url, src)
-                        
-                        streams.append({
-                            'url': src,
-                            'quality': source.get('data-quality', 'HD'),
-                            'type': 'direct'
-                        })
-            
-            print(f"🎯 Total streams found: {len(streams)}")
             return streams[:5]
             
         except Exception as e:
