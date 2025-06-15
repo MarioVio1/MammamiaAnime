@@ -126,22 +126,27 @@ class AnimeSaturnScraper(BaseScraper):
         except Exception as e:
             print(f"AnimeSaturn episodes error: {e}")
             return []
-    
     def get_stream_links(self, episode_url):
-        if not self.enabled:
-            return []
-            
-        try:
-            response = self.make_request(episode_url)
-            soup = BeautifulSoup(response.text, 'html.parser')
-            
-            streams = []
-            
-            # Cerca iframe video
-            iframes = soup.find_all('iframe')
-            for iframe in iframes:
-                src = iframe.get('src')
-                if src and any(host in src.lower() for host in ['vixcloud', 'streamingaw', 'streamtape', 'mixdrop']):
+    if not self.enabled:
+        return []
+        
+    try:
+        print(f"🔗 Getting streams from: {episode_url}")
+        response = self.make_request(episode_url)
+        soup = BeautifulSoup(response.text, 'html.parser')
+        
+        streams = []
+        
+        # METODO 1: Cerca iframe con server video
+        iframes = soup.find_all('iframe')
+        print(f"📺 Found {len(iframes)} iframes")
+        
+        for iframe in iframes:
+            src = iframe.get('src')
+            if src:
+                print(f"   Iframe src: {src}")
+                # AnimeSaturn usa questi server
+                if any(host in src.lower() for host in ['vixcloud', 'streamingaw', 'animeworld', 'streamtape', 'mixdrop', 'doodstream']):
                     if not src.startswith('http'):
                         src = urljoin(self.base_url, src)
                     
@@ -150,9 +155,54 @@ class AnimeSaturnScraper(BaseScraper):
                         'quality': 'HD',
                         'type': 'iframe'
                     })
-            
-            return streams[:5]
-            
-        except Exception as e:
-            print(f"AnimeSaturn stream error: {e}")
-            return []
+        
+        # METODO 2: Cerca link diretti nei button/link
+        download_links = soup.find_all('a', href=re.compile(r'\.(?:mp4|m3u8|mkv)'))
+        for link in download_links:
+            href = link.get('href')
+            if href and href.startswith('http'):
+                streams.append({
+                    'url': href,
+                    'quality': 'HD',
+                    'type': 'direct'
+                })
+        
+        # METODO 3: Cerca nei script per URL nascosti
+        scripts = soup.find_all('script')
+        for script in scripts:
+            if script.string:
+                # Pattern specifici per AnimeSaturn
+                patterns = [
+                    r'(?:file|src|url)["\']?\s*:\s*["\']([^"\']+\.(?:mp4|m3u8|mkv))["\']',
+                    r'https?://[^\s"\']+\.(?:mp4|m3u8|mkv)',
+                    r'["\']([^"\']*(?:vixcloud|streamingaw|animeworld)[^"\']*)["\']'
+                ]
+                
+                for pattern in patterns:
+                    matches = re.findall(pattern, script.string, re.I)
+                    for match in matches:
+                        url = match if isinstance(match, str) else match[0]
+                        if url and url.startswith('http'):
+                            print(f"   Script URL: {url}")
+                            streams.append({
+                                'url': url,
+                                'quality': 'HD',
+                                'type': 'direct'
+                            })
+        
+        # Rimuovi duplicati
+        seen_urls = set()
+        unique_streams = []
+        for stream in streams:
+            if stream['url'] not in seen_urls:
+                seen_urls.add(stream['url'])
+                unique_streams.append(stream)
+        
+        print(f"🎯 Total unique streams found: {len(unique_streams)}")
+        return unique_streams[:5]
+        
+    except Exception as e:
+        print(f"❌ AnimeSaturn stream error: {e}")
+        return []
+
+    
