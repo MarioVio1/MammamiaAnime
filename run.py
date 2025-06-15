@@ -765,12 +765,6 @@ async def addon_stream(request: Request, config, type, id):
                 
                 # ... AGGIUNGI TUTTI GLI ALTRI PROVIDER ORIGINALI QUI ...
         
-        if not streams['streams']:
-            streams['streams'].append({
-                'title': f'{Icon}Contenuto non disponibile',
-                'url': 'https://example.com/not_found.mp4'
-            })
-        
         return respond_with(streams)
     
     # GESTIONE TV (CODICE ORIGINALE)
