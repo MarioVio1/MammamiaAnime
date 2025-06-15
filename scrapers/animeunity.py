@@ -180,33 +180,38 @@ class AnimeUnityScraper(BaseScraper):
                             r'episodes["\']?\s*:\s*(\[.*?\])',
                             r'episodi["\']?\s*:\s*(\[.*?\])',
                             r'var\s+episodes\s*=\s*(\[.*?\]);',
-                            r'let\s+episodes\s*=\s*(\[.*?\]);'
+                            r'let\s+episodes\s*=\s*(\[.*?\]);',
+                            r'episodes\s*=\s*(\[.*?\]);'
                         ]
                         
                         for pattern in episodes_patterns:
                             match = re.search(pattern, script.string, re.DOTALL)
                             if match:
-                                episodes_data = json.loads(match.group(1))
-                                for ep in episodes_data:
-                                    if isinstance(ep, dict):
-                                        ep_num = ep.get('number', ep.get('episodio', len(episodes) + 1))
-                                        episodes.append({
-                                            'number': int(ep_num),
-                                            'title': f"Episodio {ep_num}",
-                                            'url': f"{anime_url}/episodio-{ep_num}"
-                                        })
-                                    elif isinstance(ep, (int, str)):
-                                        episodes.append({
-                                            'number': int(ep),
-                                            'title': f"Episodio {ep}",
-                                            'url': f"{anime_url}/episodio-{ep}"
-                                        })
-                                break
+                                try:
+                                    episodes_data = json.loads(match.group(1))
+                                    for ep in episodes_data:
+                                        if isinstance(ep, dict):
+                                            ep_num = ep.get('number', ep.get('episodio', ep.get('episode_number', len(episodes) + 1)))
+                                            episodes.append({
+                                                'number': int(ep_num),
+                                                'title': f"Episodio {ep_num}",
+                                                'url': f"{anime_url}/episodio-{ep_num}"
+                                            })
+                                        elif isinstance(ep, (int, str)):
+                                            ep_num = int(ep)
+                                            episodes.append({
+                                                'number': ep_num,
+                                                'title': f"Episodio {ep}",
+                                                'url': f"{anime_url}/episodio-{ep}"
+                                            })
+                                    break
+                                except json.JSONDecodeError:
+                                    continue
+                        
+                        if episodes:
+                            break
                     except:
                         continue
-                        
-                    if episodes:
-                        break
             
             # METODO 2: Cerca link episodi diretti
             if not episodes:
@@ -223,8 +228,20 @@ class AnimeUnityScraper(BaseScraper):
                             'url': episode_url
                         })
             
+            # METODO 3: Se non trova episodi, crea almeno il primo
+            if not episodes:
+                # Estrai ID anime dall'URL
+                anime_id_match = re.search(r'/anime/(\d+)', anime_url)
+                if anime_id_match:
+                    anime_id = anime_id_match.group(1)
+                    episodes = [{
+                        'number': 1,
+                        'title': 'Episodio 1',
+                        'url': f"{self.base_url}/anime/{anime_id}/episodio-1"
+                    }]
+            
             print(f"📺 AnimeUnity found {len(episodes)} episodes")
-            return sorted(episodes, key=lambda x: x['number'])[:100]
+            return sorted(episodes, key=lambda x: x['number'])[:50]
             
         except Exception as e:
             print(f"AnimeUnity episodes error: {e}")
@@ -240,24 +257,25 @@ class AnimeUnityScraper(BaseScraper):
             soup = BeautifulSoup(response.text, 'html.parser')
             
             streams = []
+            page_content = response.text
             
-            # METODO 1: Cerca link scws-content.net nei script
+            # METODO 1: Cerca link scws-content.net nei script (PRIORITÀ)
             scripts = soup.find_all('script')
             for script in scripts:
                 if script.string:
-                    # Pattern specifici per AnimeUnity (basati sui tuoi esempi)
+                    # Pattern specifici per AnimeUnity MP4 diretti
                     patterns = [
                         r'https://au-d\d+-\d+\.scws-content\.net/download/[^"\']*\.mp4[^"\']*',
                         r'https://[^"\']*\.scws-content\.net/[^"\']*\.mp4[^"\']*',
-                        r'(?:file|src|url|download)["\']?\s*:\s*["\']([^"\']*scws-content[^"\']*)["\']',
-                        r'["\']([^"\']*au-d\d+-\d+\.scws-content\.net[^"\']*)["\']'
+                        r'(?:file|src|url|download|video)["\']?\s*:\s*["\']([^"\']*scws-content[^"\']*\.mp4[^"\']*)["\']',
+                        r'["\']([^"\']*au-d\d+-\d+\.scws-content\.net[^"\']*\.mp4[^"\']*)["\']'
                     ]
                     
                     for pattern in patterns:
                         matches = re.findall(pattern, script.string, re.I)
                         for match in matches:
                             url = match if isinstance(match, str) else match[0]
-                            if url and url.startswith('http') and 'scws-content.net' in url:
+                            if url and url.startswith('http') and 'scws-content.net' in url and '.mp4' in url:
                                 print(f"   ✅ Found AnimeUnity MP4: {url}")
                                 
                                 # Estrai qualità dal path
