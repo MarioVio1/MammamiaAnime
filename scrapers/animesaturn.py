@@ -1,6 +1,7 @@
 import requests
 from bs4 import BeautifulSoup
 import re
+import base64
 from urllib.parse import urljoin, quote
 import Src.Utilities.config as config
 from scrapers.base_scraper import BaseScraper
@@ -17,7 +18,6 @@ class AnimeSaturnScraper(BaseScraper):
             return []
             
         try:
-            print(f"🔍 AnimeSaturn searching for: {query}")
             search_url = f"{self.base_url}/animelist"
             params = {'search': query}
             
@@ -39,7 +39,6 @@ class AnimeSaturnScraper(BaseScraper):
                 try:
                     items = soup.select(selector)
                     if items:
-                        print(f"✅ Found {len(items)} items with: {selector}")
                         anime_items = items
                         break
                 except Exception:
@@ -140,175 +139,100 @@ class AnimeSaturnScraper(BaseScraper):
             print(f"AnimeSaturn episodes error: {e}")
             return []
     
-def get_stream_links(self, episode_url):
-    if not self.enabled:
-        return []
-        
-    try:
-        print(f"🔗 Getting streams from: {episode_url}")
-        response = self.make_request(episode_url)
-        soup = BeautifulSoup(response.text, 'html.parser')
-        
-        streams = []
-        page_content = response.text
-        
-        # METODO 1: Cerca URL nei script JavaScript
-        scripts = soup.find_all('script')
-        print(f"📜 Analyzing {len(scripts)} scripts")
-        
-        for script in scripts:
-            if script.string and len(script.string) > 100:
-                script_content = script.string
-                
-                # Pattern specifici per AnimeSaturn
-                patterns = [
-                    # URL video diretti
-                    r'(?:file|src|url|video)["\']?\s*[:=]\s*["\']([^"\']+\.(?:mp4|m3u8|mkv))["\']',
-                    # URL con domini video
-                    r'["\']([^"\']*(?:vixcloud|streamingaw|animeworld|mixdrop|doodstream)[^"\']*)["\']',
-                    # URL generici che sembrano video
-                    r'https?://[^\s"\'<>]+/[^\s"\'<>]*(?:stream|video|play|watch)[^\s"\'<>]*',
-                    # Base64 o encoded URLs
-                    r'atob\(["\']([^"\']+)["\']',
-                    # Iframe src dinamici
-                    r'iframe[^>]*src["\']?\s*[:=]\s*["\']([^"\']+)["\']'
-                ]
-                
-                for pattern in patterns:
-                    matches = re.findall(pattern, script_content, re.I)
-                    for match in matches:
-                        url = match if isinstance(match, str) else match[0]
-                        if (url and len(url) > 15 and
-                            not any(skip in url.lower() for skip in ['ads', 'analytics', 'tracker', 'pixel'])):
-                            
-                            # Decodifica base64 se necessario
-                            if pattern.startswith('atob'):
-                                try:
-                                    import base64
-                                    url = base64.b64decode(url).decode('utf-8')
-                                except:
-                                    continue
-                            
-                            # Completa URL relativi
-                            if url.startswith('//'):
-                                url = 'https:' + url
-                            elif url.startswith('/'):
-                                url = self.base_url + url
-                            
-                            if url.startswith('http'):
-                                print(f"   ✅ Script URL: {url}")
-                                streams.append({
-                                    'url': url,
-                                    'quality': 'HD',
-                                    'type': 'iframe' if 'iframe' in pattern else 'direct'
-                                })
-        
-        # METODO 2: Cerca variabili JavaScript con URL
-        js_vars_patterns = [
-            r'var\s+\w+\s*=\s*["\']([^"\']+)["\']',
-            r'let\s+\w+\s*=\s*["\']([^"\']+)["\']',
-            r'const\s+\w+\s*=\s*["\']([^"\']+)["\']'
-        ]
-        
-        for pattern in js_vars_patterns:
-            matches = re.findall(pattern, page_content, re.I)
-            for match in matches:
-                if (match.startswith('http') and 
-                    any(hint in match.lower() for hint in ['stream', 'video', 'play', 'embed']) and
-                    not any(skip in match.lower() for skip in ['ads', 'analytics'])):
-                    print(f"   ✅ JS Variable URL: {match}")
-                    streams.append({
-                        'url': match,
-                        'quality': 'HD',
-                        'type': 'direct'
-                    })
-        
-        # METODO 3: Cerca tutti gli iframe (anche quelli nascosti)
-        all_iframes = soup.find_all('iframe')
-        for iframe in all_iframes:
-            src = iframe.get('src') or iframe.get('data-src') or iframe.get('data-lazy-src')
-            if src:
-                # Filtra solo pubblicità ovvie
-                if not any(ad in src.lower() for ad in ['a-ads.com', 'doubleclick.', 'googlesyndication.']):
-                    if src.startswith('//'):
-                        src = 'https:' + src
-                    elif not src.startswith('http'):
-                        src = urljoin(self.base_url, src)
+    def get_stream_links(self, episode_url):
+        if not self.enabled:
+            return []
+            
+        try:
+            print(f"🔗 Getting streams from: {episode_url}")
+            response = self.make_request(episode_url)
+            soup = BeautifulSoup(response.text, 'html.parser')
+            
+            streams = []
+            page_content = response.text
+            
+            # Cerca URL nei script JavaScript
+            scripts = soup.find_all('script')
+            
+            for script in scripts:
+                if script.string and len(script.string) > 100:
+                    script_content = script.string
                     
-                    print(f"   ✅ Iframe: {src}")
+                    patterns = [
+                        r'(?:file|src|url|video)["\']?\s*[:=]\s*["\']([^"\']+\.(?:mp4|m3u8|mkv))["\']',
+                        r'["\']([^"\']*(?:vixcloud|streamingaw|animeworld|mixdrop|doodstream)[^"\']*)["\']',
+                        r'https?://[^\s"\'<>]+/[^\s"\'<>]*(?:stream|video|play|watch)[^\s"\'<>]*',
+                        r'atob\(["\']([^"\']+)["\']',
+                        r'iframe[^>]*src["\']?\s*[:=]\s*["\']([^"\']+)["\']'
+                    ]
+                    
+                    for pattern in patterns:
+                        matches = re.findall(pattern, script_content, re.I)
+                        for match in matches:
+                            url = match if isinstance(match, str) else match[0]
+                            if (url and len(url) > 15 and
+                                not any(skip in url.lower() for skip in ['ads', 'analytics', 'tracker', 'pixel'])):
+                                
+                                if pattern.startswith('atob'):
+                                    try:
+                                        url = base64.b64decode(url).decode('utf-8')
+                                    except:
+                                        continue
+                                
+                                if url.startswith('//'):
+                                    url = 'https:' + url
+                                elif url.startswith('/'):
+                                    url = self.base_url + url
+                                
+                                if url.startswith('http'):
+                                    streams.append({
+                                        'url': url,
+                                        'quality': 'HD',
+                                        'type': 'iframe' if 'iframe' in pattern else 'direct'
+                                    })
+            
+            # Cerca tutti gli iframe
+            all_iframes = soup.find_all('iframe')
+            for iframe in all_iframes:
+                src = iframe.get('src') or iframe.get('data-src') or iframe.get('data-lazy-src')
+                if src:
+                    if not any(ad in src.lower() for ad in ['a-ads.com', 'doubleclick.', 'googlesyndication.']):
+                        if src.startswith('//'):
+                            src = 'https:' + src
+                        elif not src.startswith('http'):
+                            src = urljoin(self.base_url, src)
+                        
+                        streams.append({
+                            'url': src,
+                            'quality': 'HD',
+                            'type': 'iframe'
+                        })
+            
+            # Se non trova nulla, cerca qualsiasi URL che potrebbe essere video
+            if not streams:
+                all_urls = re.findall(r'https?://[^\s"\'<>]+', page_content)
+                video_urls = [url for url in all_urls if 
+                             any(hint in url.lower() for hint in ['stream', 'video', 'play', 'embed', 'watch']) and
+                             not any(skip in url.lower() for skip in ['ads', 'analytics', 'tracker'])]
+                
+                for url in video_urls[:3]:
                     streams.append({
-                        'url': src,
-                        'quality': 'HD',
-                        'type': 'iframe'
-                    })
-        
-        # METODO 4: Cerca link download/streaming nella pagina
-        download_links = soup.find_all('a', string=re.compile(r'download|scarica|guarda|stream|play', re.I))
-        for link in download_links:
-            href = link.get('href')
-            if href and href.startswith('http'):
-                print(f"   ✅ Download link: {href}")
-                streams.append({
-                    'url': href,
-                    'quality': 'HD',
-                    'type': 'direct'
-                })
-        
-        # METODO 5: Cerca pattern specifici AnimeSaturn
-        # AnimeSaturn potrebbe usare pattern specifici
-        animesaturn_patterns = [
-            r'player["\']?\s*[:=]\s*["\']([^"\']+)["\']',
-            r'episode["\']?\s*[:=]\s*["\']([^"\']+)["\']',
-            r'streaming["\']?\s*[:=]\s*["\']([^"\']+)["\']'
-        ]
-        
-        for pattern in animesaturn_patterns:
-            matches = re.findall(pattern, page_content, re.I)
-            for match in matches:
-                if match.startswith('http') and len(match) > 20:
-                    print(f"   ✅ AnimeSaturn pattern: {match}")
-                    streams.append({
-                        'url': match,
+                        'url': url,
                         'quality': 'HD',
                         'type': 'direct'
                     })
-        
-        # Rimuovi duplicati
-        seen_urls = set()
-        unique_streams = []
-        for stream in streams:
-            if stream['url'] not in seen_urls:
-                seen_urls.add(stream['url'])
-                unique_streams.append(stream)
-        
-        print(f"🎯 AnimeSaturn found {len(unique_streams)} unique streams")
-        
-        # Se ancora non trova nulla, debug più dettagliato
-        if not unique_streams:
-            print("❌ Still no streams found, detailed debug:")
-            print(f"   Page contains 'player': {'player' in page_content.lower()}")
-            print(f"   Page contains 'video': {'video' in page_content.lower()}")
-            print(f"   Page contains 'iframe': {'iframe' in page_content.lower()}")
-            print(f"   Page contains 'embed': {'embed' in page_content.lower()}")
             
-            # Cerca qualsiasi URL che potrebbe essere video
-            all_urls = re.findall(r'https?://[^\s"\'<>]+', page_content)
-            video_urls = [url for url in all_urls if 
-                         any(hint in url.lower() for hint in ['stream', 'video', 'play', 'embed', 'watch']) and
-                         not any(skip in url.lower() for skip in ['ads', 'analytics', 'tracker'])]
+            # Rimuovi duplicati
+            seen_urls = set()
+            unique_streams = []
+            for stream in streams:
+                if stream['url'] not in seen_urls:
+                    seen_urls.add(stream['url'])
+                    unique_streams.append(stream)
             
-            for url in video_urls[:3]:  # Prendi solo i primi 3
-                print(f"   🔄 Potential video URL: {url}")
-                unique_streams.append({
-                    'url': url,
-                    'quality': 'HD',
-                    'type': 'direct'
-                })
-        
-        return unique_streams[:5]
-        
-    except Exception as e:
-        print(f"❌ AnimeSaturn stream error: {e}")
-        import traceback
-        traceback.print_exc()
-        return []
+            print(f"🎯 AnimeSaturn found {len(unique_streams)} streams")
+            return unique_streams[:5]
+            
+        except Exception as e:
+            print(f"❌ AnimeSaturn stream error: {e}")
+            return []
