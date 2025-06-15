@@ -173,46 +173,83 @@ class AnimeSaturnScraper(BaseScraper):
         except Exception as e:
             print(f"AnimeSaturn episodes error: {e}")
             return []
-    
     def get_stream_links(self, episode_url):
-        if not self.enabled:
-            return []
-            
-        try:
-            response = self.make_request(episode_url)
-            soup = BeautifulSoup(response.text, 'html.parser')
-            
-            streams = []
-            
-            # Cerca iframe video
-            iframes = soup.find_all('iframe')
-            for iframe in iframes:
-                src = iframe.get('src')
-                if src:
+    if not self.enabled:
+        return []
+        
+    try:
+        print(f"🔗 Getting streams from: {episode_url}")
+        response = self.make_request(episode_url)
+        soup = BeautifulSoup(response.text, 'html.parser')
+        
+        streams = []
+        
+        # Cerca iframe video (FILTRA PUBBLICITÀ)
+        iframes = soup.find_all('iframe')
+        print(f"📺 Found {len(iframes)} iframes")
+        
+        for iframe in iframes:
+            src = iframe.get('src')
+            if src:
+                print(f"   Iframe src: {src}")
+                
+                # ❌ FILTRA PUBBLICITÀ
+                if any(ad_domain in src.lower() for ad_domain in ['a-ads.com', 'ads.', 'adnxs.', 'doubleclick.', 'googlesyndication.']):
+                    print(f"   ❌ Skipping ad: {src}")
+                    continue
+                
+                # ✅ ACCETTA SOLO SERVER VIDEO VALIDI
+                if any(host in src.lower() for host in ['vixcloud', 'streamingaw', 'animeworld', 'streamtape', 'mixdrop', 'doodstream', 'fembed', 'streamhub']):
                     if not src.startswith('http'):
                         src = urljoin(self.base_url, src)
                     
+                    print(f"   ✅ Valid stream: {src}")
                     streams.append({
                         'url': src,
                         'quality': 'HD',
                         'type': 'iframe'
                     })
-            
-            # Cerca video diretti
-            video_tags = soup.find_all('video')
-            for video in video_tags:
-                sources = video.find_all('source')
-                for source in sources:
-                    src = source.get('src')
-                    if src:
-                        streams.append({
-                            'url': src,
-                            'quality': 'HD',
-                            'type': 'direct'
-                        })
-            
-            return streams[:5]
-            
-        except Exception as e:
-            print(f"AnimeSaturn stream error: {e}")
-            return []
+        
+        # METODO 2: Cerca bottoni di download/streaming
+        download_buttons = soup.find_all('a', class_=re.compile(r'btn|button|download|stream'))
+        for button in download_buttons:
+            href = button.get('href')
+            if href and any(ext in href.lower() for ext in ['.mp4', '.m3u8', '.mkv']):
+                print(f"   ✅ Download link: {href}")
+                streams.append({
+                    'url': href,
+                    'quality': 'HD',
+                    'type': 'direct'
+                })
+        
+        # METODO 3: Cerca nei script JavaScript
+        scripts = soup.find_all('script')
+        for script in scripts:
+            if script.string:
+                # Pattern per trovare URL video reali
+                video_patterns = [
+                    r'(?:file|src|url)["\']?\s*:\s*["\']([^"\']+\.(?:mp4|m3u8|mkv))["\']',
+                    r'https?://[^\s"\']+\.(?:mp4|m3u8|mkv)',
+                    r'["\']([^"\']*(?:vixcloud|streamingaw|animeworld)[^"\']*)["\']'
+                ]
+                
+                for pattern in video_patterns:
+                    matches = re.findall(pattern, script.string, re.I)
+                    for match in matches:
+                        url = match if isinstance(match, str) else match[0]
+                        if url and url.startswith('http') and 'ads' not in url.lower():
+                            print(f"   ✅ Script video: {url}")
+                            streams.append({
+                                'url': url,
+                                'quality': 'HD',
+                                'type': 'direct'
+                            })
+        
+        print(f"🎯 Total valid streams found: {len(streams)}")
+        return streams[:5]
+        
+    except Exception as e:
+        print(f"❌ AnimeSaturn stream error: {e}")
+        return []
+
+
