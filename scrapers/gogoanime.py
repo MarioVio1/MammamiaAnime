@@ -10,10 +10,11 @@ class GogoAnimeScraper(BaseScraper):
     def __init__(self):
         super().__init__()
         self.name = "GogoAnime"
-        # Usa Anitaku (nuovo nome di GogoAnime)
         self.base_url = "https://www.anitaku.to"
         self.enabled = config.GA == "1"
-
+        
+    def search(self, query):
+        if not self.enabled:
             return []
             
         try:
@@ -84,53 +85,10 @@ class GogoAnimeScraper(BaseScraper):
                     print(f"Error parsing GogoAnime item: {e}")
                     continue
             
-            # Se non trova risultati, prova ricerca alternativa
-            if not results:
-                results = self._search_alternative(query)
-                    
             return results
             
         except Exception as e:
             print(f"GogoAnime search error: {e}")
-            return []
-    
-    def _search_alternative(self, query):
-        """Ricerca alternativa nella homepage o sezioni popolari"""
-        try:
-            response = self.make_request(self.base_url)
-            soup = BeautifulSoup(response.text, 'html.parser')
-            
-            results = []
-            # Cerca in tutte le sezioni anime
-            anime_links = soup.find_all('a', href=re.compile(r'/category/'))
-            
-            for link in anime_links:
-                title = link.get('title', '') or link.text.strip()
-                if query.lower() in title.lower():
-                    url = urljoin(self.base_url, link.get('href'))
-                    
-                    # Cerca immagine associata
-                    img = link.find('img') or link.find_next('img')
-                    image = None
-                    if img:
-                        img_src = img.get('src') or img.get('data-src')
-                        if img_src:
-                            image = urljoin(self.base_url, img_src)
-                    
-                    results.append({
-                        'title': title,
-                        'url': url,
-                        'image': image,
-                        'site': 'gogoanime'
-                    })
-                    
-                    if len(results) >= 5:
-                        break
-                        
-            return results
-            
-        except Exception as e:
-            print(f"GogoAnime alternative search error: {e}")
             return []
     
     def get_episodes(self, anime_url):
@@ -159,7 +117,7 @@ class GogoAnimeScraper(BaseScraper):
                             end_num = int(ep_end)
                             
                             # Genera episodi per il range
-                            for ep_num in range(start_num, min(end_num + 1, start_num + 50)):  # Limita a 50 episodi per range
+                            for ep_num in range(start_num, min(end_num + 1, start_num + 50)):
                                 episode_url = f"{self.base_url}/{anime_id}-episode-{ep_num}"
                                 episodes.append({
                                     'number': ep_num,
@@ -186,24 +144,6 @@ class GogoAnimeScraper(BaseScraper):
                             'url': episode_url
                         })
             
-            # Metodo 3: Cerca nella lista episodi della sidebar
-            if not episodes:
-                episode_list = soup.find('div', class_='anime_video_body') or soup.find('ul', class_='episodes-list')
-                if episode_list:
-                    episode_links = episode_list.find_all('a')
-                    for i, link in enumerate(episode_links):
-                        href = link.get('href', '')
-                        if 'episode' in href:
-                            ep_match = re.search(r'(\d+)', href)
-                            ep_num = int(ep_match.group(1)) if ep_match else i + 1
-                            episode_url = urljoin(self.base_url, href)
-                            
-                            episodes.append({
-                                'number': ep_num,
-                                'title': f"Episode {ep_num}",
-                                'url': episode_url
-                            })
-            
             # Se non trova episodi, crea un episodio singolo
             if not episodes:
                 episodes = [{
@@ -214,7 +154,7 @@ class GogoAnimeScraper(BaseScraper):
             
             # Ordina e limita episodi
             episodes = sorted(episodes, key=lambda x: x['number'])
-            return episodes[:100]  # Limita a 100 episodi
+            return episodes[:100]
             
         except Exception as e:
             print(f"GogoAnime episodes error: {e}")
@@ -241,8 +181,7 @@ class GogoAnimeScraper(BaseScraper):
                     streams.append({
                         'url': src,
                         'quality': 'HD',
-                        'type': 'iframe',
-                        'server': self._extract_server_name(src)
+                        'type': 'iframe'
                     })
             
             # Metodo 2: Cerca link di download/streaming alternativi
@@ -254,102 +193,11 @@ class GogoAnimeScraper(BaseScraper):
                     streams.append({
                         'url': href,
                         'quality': quality,
-                        'type': 'direct',
-                        'server': 'Direct'
+                        'type': 'direct'
                     })
             
-            # Metodo 3: Cerca nei script per link nascosti
-            scripts = soup.find_all('script')
-            for script in scripts:
-                if script.string:
-                    # Pattern per trovare URL video
-                    patterns = [
-                        r'(?:file|src|url)["\']?\s*:\s*["\']([^"\']+\.(?:mp4|m3u8|mkv))["\']',
-                        r'https?://[^\s"\']+\.(?:mp4|m3u8|mkv)',
-                        r'["\']([^"\']*(?:gogo|vidstreaming|streamani)[^"\']*)["\']'
-                    ]
-                    
-                    for pattern in patterns:
-                        matches = re.findall(pattern, script.string, re.I)
-                        for match in matches:
-                            url = match if isinstance(match, str) else match[0]
-                            if url and url.startswith('http'):
-                                streams.append({
-                                    'url': url,
-                                    'quality': 'HD',
-                                    'type': 'direct',
-                                    'server': 'Script'
-                                })
-            
-            # Metodo 4: Cerca server alternativi nella pagina
-            server_links = soup.find_all('a', class_=re.compile(r'server|quality'))
-            for link in server_links:
-                href = link.get('href')
-                if href:
-                    if not href.startswith('http'):
-                        href = urljoin(self.base_url, href)
-                    
-                    # Prova a estrarre stream da server alternativi
-                    try:
-                        server_streams = self._extract_from_server(href)
-                        streams.extend(server_streams)
-                    except:
-                        continue
-            
-            # Rimuovi duplicati e limita risultati
-            seen_urls = set()
-            unique_streams = []
-            for stream in streams:
-                if stream['url'] not in seen_urls and len(unique_streams) < 5:
-                    seen_urls.add(stream['url'])
-                    unique_streams.append(stream)
-            
-            return unique_streams
+            return streams[:5]
             
         except Exception as e:
             print(f"GogoAnime stream error: {e}")
             return []
-    
-    def _extract_from_server(self, server_url):
-        """Estrae stream da server alternativi"""
-        try:
-            response = self.make_request(server_url)
-            soup = BeautifulSoup(response.text, 'html.parser')
-            
-            streams = []
-            
-            # Cerca iframe nel server alternativo
-            iframes = soup.find_all('iframe')
-            for iframe in iframes:
-                src = iframe.get('src')
-                if src:
-                    if not src.startswith('http'):
-                        src = urljoin(server_url, src)
-                    
-                    streams.append({
-                        'url': src,
-                        'quality': 'HD',
-                        'type': 'iframe',
-                        'server': 'Alt Server'
-                    })
-            
-            return streams
-            
-        except:
-            return []
-    
-    def _extract_server_name(self, url):
-        """Estrae il nome del server dall'URL"""
-        url_lower = url.lower()
-        if 'gogo' in url_lower:
-            return 'GogoAnime'
-        elif 'vidstreaming' in url_lower:
-            return 'VidStreaming'
-        elif 'streamani' in url_lower:
-            return 'StreamAni'
-        elif 'mp4upload' in url_lower:
-            return 'Mp4Upload'
-        elif 'doodstream' in url_lower:
-            return 'DoodStream'
-        else:
-            return 'Unknown'
