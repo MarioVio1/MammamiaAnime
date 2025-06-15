@@ -392,6 +392,35 @@ async def debug_animesaturn():
     except Exception as e:
         return {"error": str(e)}
 
+@app.get('/debug-animesaturn-episode/{episode_id}')
+async def debug_episode(episode_id: str):
+    """Debug specifico per episodio AnimeSaturn"""
+    if 'animesaturn' not in anime_scrapers:
+        return {"error": "AnimeSaturn not available"}
+    
+    scraper = anime_scrapers['animesaturn']
+    episode_url = f"https://www.animesaturn.cx/ep/{episode_id}"
+    
+    try:
+        response = scraper.make_request(episode_url)
+        soup = BeautifulSoup(response.text, 'html.parser')
+        
+        return {
+            "episode_url": episode_url,
+            "status_code": response.status_code,
+            "page_title": soup.title.text if soup.title else "No title",
+            "iframes_count": len(soup.find_all('iframe')),
+            "iframes": [iframe.get('src') for iframe in soup.find_all('iframe')],
+            "scripts_count": len(soup.find_all('script')),
+            "has_player_div": bool(soup.find('div', id='player')),
+            "page_contains_stream": 'stream' in response.text.lower(),
+            "page_size": len(response.text)
+        }
+        
+    except Exception as e:
+        return {"error": str(e)}
+
+
 # CATALOGHI
 async def addon_catalog(type: str, id: str, genre: str = None, search: str = None):
     if type == "tv":
