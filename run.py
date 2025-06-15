@@ -420,6 +420,21 @@ async def debug_episode(episode_id: str):
     except Exception as e:
         return {"error": str(e)}
 
+@app.get('/test-method-exists')
+def test_method():
+    """Verifica se il metodo esiste"""
+    if 'animesaturn' not in anime_scrapers:
+        return {"error": "AnimeSaturn not available"}
+    
+    scraper = anime_scrapers['animesaturn']
+    has_method = hasattr(scraper, 'get_stream_links')
+    
+    return {
+        "has_get_stream_links": has_method,
+        "scraper_methods": [method for method in dir(scraper) if not method.startswith('_')],
+        "scraper_class": scraper.__class__.__name__
+    }
+
 
 # CATALOGHI
 async def addon_catalog(type: str, id: str, genre: str = None, search: str = None):
