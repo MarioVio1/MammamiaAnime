@@ -140,7 +140,7 @@ class AnimeSaturnScraper(BaseScraper):
             print(f"AnimeSaturn episodes error: {e}")
             return []
     
-    def get_stream_links(self, episode_url):
+def get_stream_links(self, episode_url):
     if not self.enabled:
         return []
         
