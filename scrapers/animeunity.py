@@ -18,71 +18,127 @@ class AnimeUnityScraper(BaseScraper):
             return []
             
         try:
-            # AnimeUnity ha API di ricerca
-            search_url = f"{self.base_url}/api/search"
-            params = {'q': query}
+            print(f"🔍 AnimeUnity searching for: {query}")
             
-            response = self.make_request(search_url, params=params)
-            
-            # Verifica se è JSON
-            if 'application/json' in response.headers.get('content-type', ''):
-                data = response.json()
-                results = []
+            # METODO 1: API di ricerca
+            try:
+                api_url = f"{self.base_url}/api/search"
+                params = {'q': query, 'limit': 15}
                 
-                for anime in data.get('records', []):
-                    anime_id = anime.get('id')
-                    slug = anime.get('slug', '')
-                    title = anime.get('title', anime.get('title_ita', ''))
+                response = self.make_request(api_url, params=params)
+                print(f"API Response status: {response.status_code}")
+                print(f"API Response headers: {response.headers.get('content-type', 'unknown')}")
+                
+                if response.status_code == 200 and 'application/json' in response.headers.get('content-type', ''):
+                    data = response.json()
+                    print(f"API Response data keys: {list(data.keys()) if isinstance(data, dict) else 'not dict'}")
                     
-                    if anime_id and title:
-                        results.append({
-                            'title': title,
-                            'url': f"{self.base_url}/anime/{anime_id}-{slug}",
-                            'image': anime.get('imageurl', anime.get('cover')),
-                            'site': 'animeunity',
-                            'anime_id': anime_id
-                        })
-                
-                print(f"🎯 AnimeUnity API found {len(results)} results")
-                return results[:10]
+                    results = []
+                    records = data.get('records', data.get('data', data.get('results', [])))
+                    
+                    for anime in records:
+                        anime_id = anime.get('id')
+                        slug = anime.get('slug', '')
+                        title = anime.get('title', anime.get('title_ita', anime.get('name', '')))
+                        
+                        if anime_id and title:
+                            anime_url = f"{self.base_url}/anime/{anime_id}"
+                            if slug:
+                                anime_url += f"-{slug}"
+                            
+                            results.append({
+                                'title': title,
+                                'url': anime_url,
+                                'image': anime.get('imageurl', anime.get('cover', anime.get('poster'))),
+                                'site': 'animeunity',
+                                'anime_id': anime_id
+                            })
+                    
+                    if results:
+                        print(f"✅ AnimeUnity API found {len(results)} results")
+                        return results[:10]
+                    else:
+                        print("❌ AnimeUnity API returned empty results")
+                else:
+                    print(f"❌ AnimeUnity API failed: {response.status_code}")
             
-            # Fallback HTML se API non funziona
-            return self._search_html(query)
+            except Exception as api_error:
+                print(f"❌ AnimeUnity API error: {api_error}")
             
-        except Exception as e:
-            print(f"AnimeUnity search error: {e}")
-            return self._search_html(query)
-    
-    def _search_html(self, query):
-        """Ricerca HTML fallback"""
-        try:
+            # METODO 2: Ricerca HTML fallback
+            print("🔄 Trying AnimeUnity HTML search...")
             search_url = f"{self.base_url}/anime"
             params = {'search': query}
+            
             response = self.make_request(search_url, params=params)
             soup = BeautifulSoup(response.text, 'html.parser')
             
             results = []
-            cards = soup.find_all('div', class_='card')
+            
+            # Selettori multipli per AnimeUnity
+            selectors_to_try = [
+                'div.card',
+                'div.anime-card',
+                'article.card',
+                '.col-md-3',
+                '.col-sm-6',
+                'a[href*="/anime/"]'
+            ]
+            
+            cards = []
+            for selector in selectors_to_try:
+                cards = soup.select(selector)
+                if cards:
+                    print(f"✅ AnimeUnity HTML found {len(cards)} cards with: {selector}")
+                    break
+            
+            if not cards:
+                # Fallback estremo
+                all_links = soup.find_all('a')
+                cards = [link for link in all_links if '/anime/' in link.get('href', '')]
+                print(f"🔄 AnimeUnity fallback found {len(cards)} anime links")
             
             for card in cards[:10]:
                 try:
-                    link = card.find('a')
-                    if not link:
+                    if card.name == 'a':
+                        link = card
+                        title = card.get('title', '').strip() or card.text.strip()
+                    else:
+                        link = card.find('a')
+                        if not link:
+                            continue
+                        
+                        # Cerca titolo con vari selettori
+                        title_selectors = ['h5.card-title', 'h4', 'h3', '.title', '.anime-title']
+                        title = ''
+                        for sel in title_selectors:
+                            title_elem = card.select_one(sel)
+                            if title_elem:
+                                title = title_elem.text.strip()
+                                break
+                        
+                        if not title:
+                            title = link.get('title', '').strip() or link.text.strip()
+                    
+                    if not title or not link:
                         continue
                     
-                    title_elem = card.find('h5', class_='card-title')
-                    title = title_elem.text.strip() if title_elem else link.get('title', '').strip()
+                    href = link.get('href', '')
+                    if not href or '/anime/' not in href:
+                        continue
                     
-                    url = urljoin(self.base_url, link.get('href'))
+                    url = urljoin(self.base_url, href)
                     
+                    # Cerca immagine
                     img_elem = card.find('img')
                     image = None
                     if img_elem:
-                        img_src = img_elem.get('src') or img_elem.get('data-src')
+                        img_src = img_elem.get('src') or img_elem.get('data-src') or img_elem.get('data-lazy')
                         if img_src and not img_src.startswith('data:'):
                             image = urljoin(self.base_url, img_src)
                     
-                    if title and url:
+                    if len(title) > 2:
+                        print(f"   Found: {title} - {url}")
                         results.append({
                             'title': title,
                             'url': url,
@@ -90,14 +146,17 @@ class AnimeUnityScraper(BaseScraper):
                             'site': 'animeunity'
                         })
                         
-                except Exception:
+                except Exception as e:
+                    print(f"Error parsing AnimeUnity card: {e}")
                     continue
             
             print(f"🎯 AnimeUnity HTML found {len(results)} results")
             return results
             
         except Exception as e:
-            print(f"AnimeUnity HTML search error: {e}")
+            print(f"AnimeUnity search error: {e}")
+            import traceback
+            traceback.print_exc()
             return []
     
     def get_episodes(self, anime_url):
@@ -105,6 +164,7 @@ class AnimeUnityScraper(BaseScraper):
             return []
             
         try:
+            print(f"📺 Getting AnimeUnity episodes from: {anime_url}")
             response = self.make_request(anime_url)
             soup = BeautifulSoup(response.text, 'html.parser')
             
@@ -144,7 +204,7 @@ class AnimeUnityScraper(BaseScraper):
                                 break
                     except:
                         continue
-                    
+                        
                     if episodes:
                         break
             
@@ -163,6 +223,7 @@ class AnimeUnityScraper(BaseScraper):
                             'url': episode_url
                         })
             
+            print(f"📺 AnimeUnity found {len(episodes)} episodes")
             return sorted(episodes, key=lambda x: x['number'])[:100]
             
         except Exception as e:
@@ -180,14 +241,15 @@ class AnimeUnityScraper(BaseScraper):
             
             streams = []
             
-            # METODO 1: Cerca link diretti MP4 nei script
+            # METODO 1: Cerca link scws-content.net nei script
             scripts = soup.find_all('script')
             for script in scripts:
                 if script.string:
-                    # Pattern per trovare link scws-content.net (dal risultato [1])
+                    # Pattern specifici per AnimeUnity (basati sui tuoi esempi)
                     patterns = [
+                        r'https://au-d\d+-\d+\.scws-content\.net/download/[^"\']*\.mp4[^"\']*',
                         r'https://[^"\']*\.scws-content\.net/[^"\']*\.mp4[^"\']*',
-                        r'(?:file|src|url)["\']?\s*:\s*["\']([^"\']*scws-content[^"\']*)["\']',
+                        r'(?:file|src|url|download)["\']?\s*:\s*["\']([^"\']*scws-content[^"\']*)["\']',
                         r'["\']([^"\']*au-d\d+-\d+\.scws-content\.net[^"\']*)["\']'
                     ]
                     
@@ -198,7 +260,7 @@ class AnimeUnityScraper(BaseScraper):
                             if url and url.startswith('http') and 'scws-content.net' in url:
                                 print(f"   ✅ Found AnimeUnity MP4: {url}")
                                 
-                                # Estrai qualità dal path (1080p, 720p, etc.)
+                                # Estrai qualità dal path
                                 quality = 'HD'
                                 if '1080p' in url:
                                     quality = '1080p'
@@ -213,11 +275,11 @@ class AnimeUnityScraper(BaseScraper):
                                     'type': 'direct'
                                 })
             
-            # METODO 2: Cerca iframe video
+            # METODO 2: Cerca iframe AnimeUnity
             iframes = soup.find_all('iframe')
             for iframe in iframes:
                 src = iframe.get('src')
-                if src and any(host in src.lower() for host in ['animeunity', 'scws-content']):
+                if src and ('animeunity' in src.lower() or 'scws-content' in src.lower()):
                     if not src.startswith('http'):
                         src = urljoin(self.base_url, src)
                     
